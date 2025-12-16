@@ -1,6 +1,7 @@
 local pluginName = "Spooner"
 local menuRootPath = FileMgr.GetMenuRootPath() .. "\\Lua\\" .. pluginName
 local nativesPath = menuRootPath .. "\\Assets\\natives.lua"
+local configPath = menuRootPath .. "\\config.txt"
 
 FileMgr.CreateDir(menuRootPath)
 FileMgr.CreateDir(menuRootPath .. "\\Assets")
@@ -173,6 +174,55 @@ end
 
 function CustomLogger.Error(str)
     Logger.Log(eLogColor.RED, pluginName, str)
+end
+
+-- ============================================================================
+-- Configuration Management
+-- ============================================================================
+local Config = {
+    enableF9Key = false,
+    throwableMode = false
+}
+
+local function SaveConfig()
+    -- Simple key=value format
+    local configData = "enableF9Key=" .. tostring(Config.enableF9Key) .. "\n" ..
+                       "throwableMode=" .. tostring(Config.throwableMode) .. "\n"
+
+    if FileMgr.WriteFileContent(configPath, configData) then
+        CustomLogger.Info("Configuration saved")
+        return true
+    else
+        CustomLogger.Error("Failed to save configuration")
+        return false
+    end
+end
+
+local function LoadConfig()
+    if not FileMgr.DoesFileExist(configPath) then
+        CustomLogger.Info("No config file found, using defaults")
+        return
+    end
+
+    local configData = FileMgr.ReadFileContent(configPath)
+    if not configData or configData == "" then
+        CustomLogger.Warn("Config file is empty")
+        return
+    end
+
+    -- Parse simple key=value format
+    for line in configData:gmatch("[^\r\n]+") do
+        local key, value = line:match("^(.-)=(.+)$")
+        if key and value then
+            if key == "enableF9Key" then
+                Config.enableF9Key = (value == "true")
+            elseif key == "throwableMode" then
+                Config.throwableMode = (value == "true")
+            end
+        end
+    end
+
+    CustomLogger.Info("Configuration loaded")
 end
 
 -- ============================================================================
@@ -779,15 +829,6 @@ function DrawManager.DrawInstructionalButtons()
     )
     buttonIndex = buttonIndex + 1
 
-    if SpawnMenu and SpawnMenu.selectedModel then
-        DrawManager.AddInstructionalButton(
-            buttonIndex,
-            Keybinds.SpawnAtCrosshair.string,
-            "Spawn: " .. SpawnMenu.selectedModelName
-        )
-        buttonIndex = buttonIndex + 1
-    end
-
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "DRAW_INSTRUCTIONAL_BUTTONS")
     GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(-1)
     GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
@@ -881,23 +922,6 @@ function DrawManager.ClickGUIInit()
             ClickGUI.EndCustomChildWindow()
         end
     end)
-
-    ClickGUI.AddTab("Spawn Menu", function()
-        if ClickGUI.BeginCustomChildWindow("SpawnMenu") then
-            if SpawnMenu and SpawnMenu.objects then
-                for _, category in ipairs(SpawnMenu.objects) do
-                    if ImGui.CollapsingHeader(category.name) then
-                        for _, item in ipairs(category.items) do
-                            local itemHash = Utils.Joaat("SpawnMenu_" .. item.model)
-                            ClickGUI.RenderFeature(itemHash)
-                        end
-                    end
-                end
-            end
-
-            ClickGUI.EndCustomChildWindow()
-        end
-    end)
 end
 
 -- ============================================================================
@@ -972,33 +996,50 @@ FeatureMgr.AddFeature(
     end
 )
 
-FeatureMgr.AddFeature(
+local enableF9KeyFeature = FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_EnableF9Key"),
     "Enable F9 Key",
     eFeatureType.Toggle,
     "Enable F9 key to toggle freecam",
     function(f)
-        if f:IsToggled() then
+        Config.enableF9Key = f:IsToggled()
+        if Config.enableF9Key then
             toggleSpoonerModeFeature:AddHotKey(120)
         else
             toggleSpoonerModeFeature:RemoveHotkey(120, false)
         end
+        SaveConfig()
     end
 )
 
-FeatureMgr.AddFeature(
+local enableThrowableModeFeature = FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_EnableThrowableMode"),
     "Enable Throwable Mode",
     eFeatureType.Toggle,
     "Enable Throwable Mode",
     function(f)
-        Spooner.throwableMode = f:IsToggled()
+        Config.throwableMode = f:IsToggled()
+        Spooner.throwableMode = Config.throwableMode
+        SaveConfig()
     end
 )
 
 -- ============================================================================
 -- Initialization
 -- ============================================================================
+-- Load configuration and restore settings
+LoadConfig()
+
+-- Restore F9 key setting
+if Config.enableF9Key then
+    enableF9KeyFeature:Toggle()
+end
+
+-- Restore throwable mode setting
+if Config.throwableMode then
+    enableThrowableModeFeature:Toggle()
+end
+
 DrawManager.ClickGUIInit()
 
 Script.RegisterLooped(function()
