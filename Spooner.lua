@@ -6,6 +6,10 @@ local configPath = menuRootPath .. "\\config.txt"
 FileMgr.CreateDir(menuRootPath)
 FileMgr.CreateDir(menuRootPath .. "\\Assets")
 
+local propListPath = menuRootPath .. "\\Assets\\PropList.xml"
+local vehicleListPath = menuRootPath .. "\\Assets\\VehicleList.xml"
+local pedListPath = menuRootPath .. "\\Assets\\PedList.xml"
+
 -- ============================================================================
 -- Constants
 -- ============================================================================
@@ -26,6 +30,7 @@ local CONSTANTS = {
     PITCH_CLAMP_MAX = 89.0,
     PITCH_CLAMP_MIN = -89.0,
     VELOCITY_MULTIPLIER = 30.0,
+    CLIP_TO_GROUND_DISTANCE = 1.5, -- Distance from ground to trigger clip
 }
 
 -- ============================================================================
@@ -182,14 +187,14 @@ Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal)
 local Config = {
     enableF9Key = false,
     throwableMode = false,
-    groundCollision = false
+    clipToGround = false,
 }
 
 local function SaveConfig()
     -- Simple key=value format
     local configData = "enableF9Key=" .. tostring(Config.enableF9Key) .. "\n" ..
                        "throwableMode=" .. tostring(Config.throwableMode) .. "\n" ..
-                       "groundCollision=" .. tostring(Config.groundCollision) .. "\n"
+                       "clipToGround=" .. tostring(Config.clipToGround) .. "\n"
 
     if FileMgr.WriteFileContent(configPath, configData) then
         CustomLogger.Info("Configuration saved")
@@ -220,8 +225,8 @@ local function LoadConfig()
                 Config.enableF9Key = (value == "true")
             elseif key == "throwableMode" then
                 Config.throwableMode = (value == "true")
-            elseif key == "groundCollision" then
-                Config.groundCollision = (value == "true")
+            elseif key == "clipToGround" then
+                Config.clipToGround = (value == "true")
             end
         end
     end
@@ -354,6 +359,7 @@ Spooner.selectedEntityIndex = 0
 Spooner.makeMissionEntity = false
 Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
+Spooner.clipToGround = false
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MakeEntityNetworked(entity)
@@ -398,6 +404,51 @@ function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
         y = vec.x * fwd.x + vec.y * fwd.y + vec.z * fwd.z,
         z = vec.x * up.x + vec.y * up.y + vec.z * up.z
     }
+end
+
+function Spooner.GetGroundZAtPosition(x, y, z)
+    local groundZ = Memory.Alloc(4)  -- Allocate 4 bytes for a float
+    local found = MISC.GET_GROUND_Z_FOR_3D_COORD(x, y, z, groundZ, false, false)
+
+    local result = nil
+    if found then
+        result = Memory.ReadFloat(groundZ)
+    end
+
+    Memory.Free(groundZ)
+    return result
+end
+
+function Spooner.ClipEntityToGround(entity, newPos)
+    if not Spooner.clipToGround then
+        return newPos
+    end
+
+    -- Get ground Z at the entity's position
+    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z + 100)
+
+    if groundZ then
+        -- Get entity model dimensions to calculate the bottom of the entity
+        local min = Memory.Alloc(24)
+        local max = Memory.Alloc(24)
+        MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
+
+        local minZ = Memory.ReadFloat(min + 16)  -- Read with proper Vector3 stride
+
+        Memory.Free(min)
+        Memory.Free(max)
+
+        -- Calculate distance from entity bottom to ground
+        local entityBottomZ = newPos.z + minZ
+        local distanceToGround = entityBottomZ - groundZ
+
+        -- If close enough to ground (above or below), snap to it
+        if math.abs(distanceToGround) < CONSTANTS.CLIP_TO_GROUND_DISTANCE then
+            newPos.z = groundZ - minZ
+        end
+    end
+
+    return newPos
 end
 
 function Spooner.StartGrabbing()
@@ -454,50 +505,11 @@ function Spooner.UpdateGrabbedEntity()
 
     local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.grabOffsets)
 
-    -- Optional ground collision prevention
-    if Config.groundCollision then
-        local groundZPtr = Memory.Alloc(8)  -- Allocate 8 bytes for float/double
-        Memory.WriteFloat(groundZPtr, 0.0)
-
-        local foundGround = MISC.GET_GROUND_Z_FOR_3D_COORD(newPos.x, newPos.y, newPos.z + 100.0, groundZPtr, false, false)
-
-        if foundGround then
-            local groundZValue = Memory.ReadFloat(groundZPtr)
-
-            -- Get entity dimensions to calculate where the bottom of the entity is
-            local minPtr = Memory.Alloc(24)  -- 3 floats (x, y, z)
-            local maxPtr = Memory.Alloc(24)
-            MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(Spooner.grabbedEntity), minPtr, maxPtr)
-
-            -- Read the minimum Z (bottom of the entity relative to its origin)
-            local min = Memory.ReadV3(minPtr)
-            local max = Memory.ReadV3(maxPtr)
-
-            -- DEBUG: Log the values
-            CustomLogger.Info(string.format("Ground Z: %.3f, Entity Pos Z: %.3f, MinZ: %.3f, MaxZ: %.3f",
-                groundZValue, newPos.z, min.z, max.z))
-
-            -- Calculate where the entity's origin needs to be so its bottom sits on the ground
-            -- minZ is negative (e.g., -0.5 means bottom is 0.5 units below origin)
-            -- So we subtract minZ from ground height to get the proper origin height
-            local targetOriginZ = groundZValue - min.z
-
-            CustomLogger.Info(string.format("Target Origin Z: %.3f (Ground: %.3f - MinZ: %.3f)",
-                targetOriginZ, groundZValue, min.z))
-
-            if newPos.z < targetOriginZ then
-                CustomLogger.Info(string.format("Adjusting Z from %.3f to %.3f", newPos.z, targetOriginZ))
-                newPos.z = targetOriginZ
-            end
-
-            Memory.Free(minPtr)
-            Memory.Free(maxPtr)
-        end
-
-        Memory.Free(groundZPtr)
-    end
+    -- Apply clip to ground if enabled
+    newPos = Spooner.ClipEntityToGround(Spooner.grabbedEntity, newPos)
 
     ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.grabbedEntity, newPos.x, newPos.y, newPos.z, false, false, false)
+
     ENTITY.SET_ENTITY_ROTATION(
         Spooner.grabbedEntity,
         Spooner.grabbedEntityRotation.x,
@@ -791,7 +803,7 @@ function DrawManager.DrawInstructionalButtons()
     if not Spooner.inSpoonerMode then
         return
     end
-
+    
     if not Spooner.scaleform then
         Spooner.scaleform = GRAPHICS.REQUEST_SCALEFORM_MOVIE("instructional_buttons")
     end
@@ -894,6 +906,113 @@ function DrawManager.GetEntityName(entity)
     return "Unknown - " .. modelName
 end
 
+function DrawManager.Draw2DBox(entity)
+    if not ENTITY.DOES_ENTITY_EXIST(entity) then
+        return
+    end
+
+    -- Get entity bounding box
+    -- GTA V Vector3 has padding: x(4) + pad(4) + y(4) + pad(4) + z(4) + pad(4) = 24 bytes
+    local min = Memory.Alloc(24)
+    local max = Memory.Alloc(24)
+    MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
+
+    -- Read with proper Vector3 stride (8 bytes per component due to padding)
+    local minX = Memory.ReadFloat(min)
+    local minY = Memory.ReadFloat(min + 8)
+    local minZ = Memory.ReadFloat(min + 16)
+    local maxX = Memory.ReadFloat(max)
+    local maxY = Memory.ReadFloat(max + 8)
+    local maxZ = Memory.ReadFloat(max + 16)
+
+    Memory.Free(min)
+    Memory.Free(max)
+
+    -- Debug: Log dimensions to check values
+    -- CustomLogger.Info(string.format("Dims: X[%.2f,%.2f] Y[%.2f,%.2f] Z[%.2f,%.2f]", minX, maxX, minY, maxY, minZ, maxZ))
+
+    -- Calculate the 8 corners of the bounding box
+    local corners = {
+        {minX, minY, minZ}, -- bottom front left
+        {maxX, minY, minZ}, -- bottom front right
+        {maxX, maxY, minZ}, -- bottom back right
+        {minX, maxY, minZ}, -- bottom back left
+        {minX, minY, maxZ}, -- top front left
+        {maxX, minY, maxZ}, -- top front right
+        {maxX, maxY, maxZ}, -- top back right
+        {minX, maxY, maxZ}  -- top back left
+    }
+
+    -- Transform corners to world space
+    local worldCorners = {}
+    for _, corner in ipairs(corners) do
+        local worldPos = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(entity, corner[1], corner[2], corner[3])
+        table.insert(worldCorners, worldPos)
+    end
+
+    -- Draw bottom edges (RED)
+    GRAPHICS.DRAW_LINE(worldCorners[1].x, worldCorners[1].y, worldCorners[1].z,
+                       worldCorners[2].x, worldCorners[2].y, worldCorners[2].z, 255, 0, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[2].x, worldCorners[2].y, worldCorners[2].z,
+                       worldCorners[3].x, worldCorners[3].y, worldCorners[3].z, 255, 0, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[3].x, worldCorners[3].y, worldCorners[3].z,
+                       worldCorners[4].x, worldCorners[4].y, worldCorners[4].z, 255, 0, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[4].x, worldCorners[4].y, worldCorners[4].z,
+                       worldCorners[1].x, worldCorners[1].y, worldCorners[1].z, 255, 0, 0, 255)
+
+    -- Draw top edges (BLUE)
+    GRAPHICS.DRAW_LINE(worldCorners[5].x, worldCorners[5].y, worldCorners[5].z,
+                       worldCorners[6].x, worldCorners[6].y, worldCorners[6].z, 0, 0, 255, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[6].x, worldCorners[6].y, worldCorners[6].z,
+                       worldCorners[7].x, worldCorners[7].y, worldCorners[7].z, 0, 0, 255, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[7].x, worldCorners[7].y, worldCorners[7].z,
+                       worldCorners[8].x, worldCorners[8].y, worldCorners[8].z, 0, 0, 255, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[8].x, worldCorners[8].y, worldCorners[8].z,
+                       worldCorners[5].x, worldCorners[5].y, worldCorners[5].z, 0, 0, 255, 255)
+
+    -- Draw vertical edges connecting bottom to top (GREEN)
+    GRAPHICS.DRAW_LINE(worldCorners[1].x, worldCorners[1].y, worldCorners[1].z,
+                       worldCorners[5].x, worldCorners[5].y, worldCorners[5].z, 0, 255, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[2].x, worldCorners[2].y, worldCorners[2].z,
+                       worldCorners[6].x, worldCorners[6].y, worldCorners[6].z, 0, 255, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[3].x, worldCorners[3].y, worldCorners[3].z,
+                       worldCorners[7].x, worldCorners[7].y, worldCorners[7].z, 0, 255, 0, 255)
+    GRAPHICS.DRAW_LINE(worldCorners[4].x, worldCorners[4].y, worldCorners[4].z,
+                       worldCorners[8].x, worldCorners[8].y, worldCorners[8].z, 0, 255, 0, 255)
+end
+
+function DrawManager.Draw3DBox(entity, r, g, b, a)
+    if not ENTITY.DOES_ENTITY_EXIST(entity) then
+        return
+    end
+
+    -- Draw a simple marker at entity center
+    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+
+    -- Draw a vertical line to show entity location
+    GRAPHICS.DRAW_LINE(pos.x, pos.y, pos.z - 1.0, pos.x, pos.y, pos.z + 2.0, r, g, b, a)
+
+    -- Draw horizontal cross
+    GRAPHICS.DRAW_LINE(pos.x - 0.5, pos.y, pos.z, pos.x + 0.5, pos.y, pos.z, r, g, b, a)
+    GRAPHICS.DRAW_LINE(pos.x, pos.y - 0.5, pos.z, pos.x, pos.y + 0.5, pos.z, r, g, b, a)
+end
+
+function DrawManager.DrawTargetedEntityBox()
+    if not Spooner.inSpoonerMode then
+        return
+    end
+
+    -- Draw box on targeted entity
+    if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
+        DrawManager.Draw2DBox(Spooner.targetedEntity)
+    end
+
+    -- Draw box on grabbed entity
+    if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
+        DrawManager.Draw2DBox(Spooner.grabbedEntity)
+    end
+end
+
 function DrawManager.DrawSelectedEntityMarker()
     if not Spooner.inSpoonerMode then
         return
@@ -923,7 +1042,7 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_MakeMissionEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableGroundCollision"))
+            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
 
             ImGui.Separator()
             ImGui.Text("Managed Entities Database")
@@ -1069,13 +1188,14 @@ local enableThrowableModeFeature = FeatureMgr.AddFeature(
     end
 )
 
-local enableGroundCollisionFeature = FeatureMgr.AddFeature(
-    Utils.Joaat("Spooner_EnableGroundCollision"),
-    "Enable Ground Collision",
+local enableClipToGroundFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_EnableClipToGround"),
+    "Clip to Ground",
     eFeatureType.Toggle,
-    "Prevent entities from going through the ground",
+    "Snap entities to ground when within " .. CONSTANTS.CLIP_TO_GROUND_DISTANCE .. "m",
     function(f)
-        Config.groundCollision = f:IsToggled()
+        Config.clipToGround = f:IsToggled()
+        Spooner.clipToGround = Config.clipToGround
         SaveConfig()
     end
 )
@@ -1096,9 +1216,9 @@ if Config.throwableMode then
     enableThrowableModeFeature:Toggle()
 end
 
--- Restore ground collision setting
-if Config.groundCollision then
-    enableGroundCollisionFeature:Toggle()
+-- Restore clip to ground setting
+if Config.clipToGround then
+    enableClipToGroundFeature:Toggle()
 end
 
 DrawManager.ClickGUIInit()
@@ -1108,6 +1228,7 @@ Script.RegisterLooped(function()
     DrawManager.DrawCrosshair()
     DrawManager.DrawInstructionalButtons()
     DrawManager.DrawSelectedEntityMarker()
+    DrawManager.DrawTargetedEntityBox()
 end)
 
 Script.RegisterLooped(function()
