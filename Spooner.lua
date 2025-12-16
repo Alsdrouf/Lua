@@ -51,6 +51,206 @@ function CustomLogger.Error(str)
 end
 
 -- ============================================================================
+-- XML Parser
+-- ============================================================================
+local XMLParser = {}
+
+function XMLParser.ParseAttributes(tag)
+    local attrs = {}
+    for name, value in string.gmatch(tag, '(%w+)="([^"]*)"') do
+        attrs[name] = value
+    end
+    return attrs
+end
+
+function XMLParser.Parse(xmlString)
+    -- Remove XML declaration and comments
+    xmlString = xmlString:gsub("<%?[^?]*%?>", "")
+    xmlString = xmlString:gsub("<!%-%-.-%-%->" , "")
+
+    local result = {}
+    local stack = {result}
+    local current = result
+
+    for closing, tagName, attrs, selfClosing in string.gmatch(xmlString, "<(/?)([%w_]+)(.-)%s*(/?)>") do
+        if closing == "/" then
+            table.remove(stack)
+            current = stack[#stack]
+        else
+            local node = {
+                tag = tagName,
+                attributes = XMLParser.ParseAttributes(attrs),
+                children = {}
+            }
+
+            if not current.children then
+                current.children = {}
+            end
+            table.insert(current.children, node)
+
+            if selfClosing ~= "/" then
+                table.insert(stack, node)
+                current = node
+            end
+        end
+    end
+
+    return result.children or {}
+end
+
+-- ============================================================================
+-- Entity Lists (Props, Vehicles, Peds)
+-- ============================================================================
+local EntityLists = {
+    Props = {},      -- { [categoryName] = { {name, hash}, ... } }
+    Vehicles = {},   -- { [categoryName] = { {name}, ... } }
+    Peds = {}        -- { [categoryName] = { {name, caption}, ... } }
+}
+
+function EntityLists.LoadPropList(filePath)
+    if not FileMgr.DoesFileExist(filePath) then
+        CustomLogger.Warn("PropList.xml not found at: " .. filePath)
+        return false
+    end
+
+    local content = FileMgr.ReadFileContent(filePath)
+    if not content or content == "" then
+        CustomLogger.Error("Failed to read PropList.xml")
+        return false
+    end
+
+    EntityLists.Props = {}
+    local parsed = XMLParser.Parse(content)
+
+    for _, node in ipairs(parsed) do
+        if node.tag == "PropList" then
+            for _, categoryNode in ipairs(node.children or {}) do
+                if categoryNode.tag == "Category" then
+                    local categoryName = categoryNode.attributes.name or "Unknown"
+                    EntityLists.Props[categoryName] = {}
+
+                    for _, propNode in ipairs(categoryNode.children or {}) do
+                        if propNode.tag == "Prop" then
+                            table.insert(EntityLists.Props[categoryName], {
+                                name = propNode.attributes.name or "",
+                                hash = propNode.attributes.hash or ""
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local categoryCount = 0
+    local propCount = 0
+    for _, props in pairs(EntityLists.Props) do
+        categoryCount = categoryCount + 1
+        propCount = propCount + #props
+    end
+
+    CustomLogger.Info("Loaded PropList: " .. categoryCount .. " categories, " .. propCount .. " props")
+    return true
+end
+
+function EntityLists.LoadVehicleList(filePath)
+    if not FileMgr.DoesFileExist(filePath) then
+        CustomLogger.Warn("VehicleList.xml not found at: " .. filePath)
+        return false
+    end
+
+    local content = FileMgr.ReadFileContent(filePath)
+    if not content or content == "" then
+        CustomLogger.Error("Failed to read VehicleList.xml")
+        return false
+    end
+
+    EntityLists.Vehicles = {}
+    local parsed = XMLParser.Parse(content)
+
+    for _, node in ipairs(parsed) do
+        if node.tag == "VehicleList" then
+            for _, categoryNode in ipairs(node.children or {}) do
+                if categoryNode.tag == "Category" then
+                    local categoryName = categoryNode.attributes.name or "Unknown"
+                    EntityLists.Vehicles[categoryName] = {}
+
+                    for _, vehicleNode in ipairs(categoryNode.children or {}) do
+                        if vehicleNode.tag == "Vehicle" then
+                            table.insert(EntityLists.Vehicles[categoryName], {
+                                name = vehicleNode.attributes.name or ""
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local categoryCount = 0
+    local vehicleCount = 0
+    for _, vehicles in pairs(EntityLists.Vehicles) do
+        categoryCount = categoryCount + 1
+        vehicleCount = vehicleCount + #vehicles
+    end
+
+    CustomLogger.Info("Loaded VehicleList: " .. categoryCount .. " categories, " .. vehicleCount .. " vehicles")
+    return true
+end
+
+function EntityLists.LoadPedList(filePath)
+    if not FileMgr.DoesFileExist(filePath) then
+        CustomLogger.Warn("PedList.xml not found at: " .. filePath)
+        return false
+    end
+
+    local content = FileMgr.ReadFileContent(filePath)
+    if not content or content == "" then
+        CustomLogger.Error("Failed to read PedList.xml")
+        return false
+    end
+
+    EntityLists.Peds = {}
+    local parsed = XMLParser.Parse(content)
+
+    for _, node in ipairs(parsed) do
+        if node.tag == "PedList" then
+            for _, categoryNode in ipairs(node.children or {}) do
+                if categoryNode.tag == "Category" then
+                    local categoryName = categoryNode.attributes.name or "Unknown"
+                    EntityLists.Peds[categoryName] = {}
+
+                    for _, pedNode in ipairs(categoryNode.children or {}) do
+                        if pedNode.tag == "Ped" then
+                            table.insert(EntityLists.Peds[categoryName], {
+                                name = pedNode.attributes.name or "",
+                                caption = pedNode.attributes.caption or ""
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local categoryCount = 0
+    local pedCount = 0
+    for _, peds in pairs(EntityLists.Peds) do
+        categoryCount = categoryCount + 1
+        pedCount = pedCount + #peds
+    end
+
+    CustomLogger.Info("Loaded PedList: " .. categoryCount .. " categories, " .. pedCount .. " peds")
+    return true
+end
+
+function EntityLists.LoadAll()
+    EntityLists.LoadPropList(propListPath)
+    EntityLists.LoadVehicleList(vehicleListPath)
+    EntityLists.LoadPedList(pedListPath)
+end
+
+-- ============================================================================
 -- Utilities
 -- ============================================================================
 local function DownloadAndSaveLuaFile(url, filePath)
@@ -180,6 +380,8 @@ Keybinds.MoveForward = Keybinds.CreateKeybind(32, Keybinds.GetControlNormal)
 Keybinds.MoveBackward = Keybinds.CreateKeybind(33, Keybinds.GetControlNormal)
 Keybinds.MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal)
 Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal)
+Keybinds.ConfirmSpawn = Keybinds.CreateKeybind(201, Keybinds.IsJustPressed)  -- Enter key
+Keybinds.CancelSpawn = Keybinds.CreateKeybind(202, Keybinds.IsJustPressed)   -- Backspace key
 
 -- ============================================================================
 -- Configuration Management
@@ -360,6 +562,12 @@ Spooner.makeMissionEntity = false
 Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 Spooner.clipToGround = false
+-- Preview spawn system
+Spooner.previewEntity = nil
+Spooner.previewModelHash = nil
+Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
+Spooner.previewModelName = nil
+Spooner.previewRotation = 0.0
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MakeEntityNetworked(entity)
@@ -705,6 +913,236 @@ function Spooner.ManageEntities()
             table.remove(Spooner.managedEntities, i)
             CustomLogger.Info("Removed invalid entity from list")
         end
+    end
+end
+
+-- ============================================================================
+-- Spawner
+-- ============================================================================
+local Spawner = {}
+
+function Spawner.LoadModel(modelHash, timeout)
+    timeout = timeout or 5000
+    local startTime = Time.GetEpocheMs()
+
+    STREAMING.REQUEST_MODEL(modelHash)
+    while not STREAMING.HAS_MODEL_LOADED(modelHash) do
+        if Time.GetEpocheMs() - startTime > timeout then
+            CustomLogger.Error("Failed to load model: " .. tostring(modelHash))
+            return false
+        end
+        Script.Yield(0)
+    end
+    return true
+end
+
+function Spawner.SelectEntity(entityType, modelName, modelHash)
+    -- Clear existing preview if any
+    Spawner.ClearPreview()
+
+    Spooner.previewEntityType = entityType
+    Spooner.previewModelName = modelName
+    Spooner.previewModelHash = modelHash
+    Spooner.previewRotation = 0.0
+
+    CustomLogger.Info("Selected " .. entityType .. ": " .. modelName)
+end
+
+function Spawner.ClearPreview()
+    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+        ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+    end
+    Spooner.previewEntity = nil
+    Spooner.previewModelHash = nil
+    Spooner.previewEntityType = nil
+    Spooner.previewModelName = nil
+    Spooner.previewRotation = 0.0
+end
+
+function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
+    local entity = nil
+
+    if entityType == "prop" then
+        entity = OBJECT.CREATE_OBJECT(modelHash, pos.x, pos.y, pos.z, false, false, false)
+    elseif entityType == "vehicle" then
+        entity = VEHICLE.CREATE_VEHICLE(modelHash, pos.x, pos.y, pos.z, 0.0, false, false, false)
+    elseif entityType == "ped" then
+        entity = PED.CREATE_PED(26, modelHash, pos.x, pos.y, pos.z, 0.0, false, false)
+    end
+
+    if entity and entity ~= 0 then
+        -- Make it intangible and transparent
+        ENTITY.SET_ENTITY_COLLISION(entity, false, false)
+        ENTITY.SET_ENTITY_ALPHA(entity, 150, false)
+        ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
+        ENTITY.FREEZE_ENTITY_POSITION(entity, true)
+
+        if entityType == "ped" then
+            PED.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(entity, true)
+            TASK.TASK_SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(entity, true)
+            TASK.TASK_STAND_STILL(entity, -1)
+        end
+    end
+
+    return entity
+end
+
+function Spawner.GetCrosshairWorldPosition()
+    if not Spooner.freecam then
+        return nil
+    end
+
+    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+    local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)
+
+    local radZ = math.rad(camRot.z)
+    local radX = math.rad(camRot.x)
+
+    local fwdX = -math.sin(radZ) * math.cos(radX)
+    local fwdY = math.cos(radZ) * math.cos(radX)
+    local fwdZ = math.sin(radX)
+
+    local distance = 10.0
+    local endPos = {
+        x = camPos.x + fwdX * distance,
+        y = camPos.y + fwdY * distance,
+        z = camPos.z + fwdZ * distance
+    }
+
+    -- Raycast to find ground/surface
+    local hit = Memory.Alloc(4)
+    local endCoords = Memory.Alloc(24)
+    local surfaceNormal = Memory.Alloc(24)
+    local entityHit = Memory.Alloc(4)
+
+    local rayHandle = SHAPETEST.START_EXPENSIVE_SYNCHRONOUS_SHAPE_TEST_LOS_PROBE(
+        camPos.x, camPos.y, camPos.z,
+        camPos.x + fwdX * 100.0,
+        camPos.y + fwdY * 100.0,
+        camPos.z + fwdZ * 100.0,
+        -1,
+        Spooner.previewEntity or 0,
+        7
+    )
+
+    local result = SHAPETEST.GET_SHAPE_TEST_RESULT(rayHandle, hit, endCoords, surfaceNormal, entityHit)
+
+    local hitResult = Memory.ReadInt(hit)
+    local finalPos = endPos
+
+    if hitResult == 1 then
+        finalPos = {
+            x = Memory.ReadFloat(endCoords),
+            y = Memory.ReadFloat(endCoords + 8),
+            z = Memory.ReadFloat(endCoords + 16)
+        }
+    end
+
+    Memory.Free(hit)
+    Memory.Free(endCoords)
+    Memory.Free(surfaceNormal)
+    Memory.Free(entityHit)
+
+    return finalPos
+end
+
+function Spawner.UpdatePreview()
+    if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
+        if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+            ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+            Spooner.previewEntity = nil
+        end
+        return
+    end
+
+    local pos = Spawner.GetCrosshairWorldPosition()
+    if not pos then return end
+
+    -- Create preview entity if needed
+    if not Spooner.previewEntity or not ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+        if not STREAMING.HAS_MODEL_LOADED(Spooner.previewModelHash) then
+            STREAMING.REQUEST_MODEL(Spooner.previewModelHash)
+            return
+        end
+        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, pos)
+    end
+
+    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+        -- Handle rotation with Q/E keys
+        if Keybinds.RotateRight.IsPressed() then
+            Spooner.previewRotation = Spooner.previewRotation - 1.0
+        elseif Keybinds.RotateLeft.IsPressed() then
+            Spooner.previewRotation = Spooner.previewRotation + 1.0
+        end
+
+        -- Update position
+        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, pos.x, pos.y, pos.z, false, false, false)
+        ENTITY.SET_ENTITY_HEADING(Spooner.previewEntity, Spooner.previewRotation)
+
+        -- Place on ground
+        if Spooner.clipToGround then
+            ENTITY.PLACE_ENTITY_ON_GROUND_PROPERLY(Spooner.previewEntity)
+        end
+    end
+end
+
+function Spawner.ConfirmSpawn()
+    if not Spooner.previewEntity or not ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+        return
+    end
+
+    local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
+    local heading = ENTITY.GET_ENTITY_HEADING(Spooner.previewEntity)
+
+    -- Delete preview
+    ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+    Spooner.previewEntity = nil
+
+    -- Create actual entity
+    Script.QueueJob(function()
+        if not Spawner.LoadModel(Spooner.previewModelHash) then return end
+
+        local entity = nil
+
+        if Spooner.previewEntityType == "prop" then
+            entity = OBJECT.CREATE_OBJECT(Spooner.previewModelHash, pos.x, pos.y, pos.z, true, true, false)
+        elseif Spooner.previewEntityType == "vehicle" then
+            entity = VEHICLE.CREATE_VEHICLE(Spooner.previewModelHash, pos.x, pos.y, pos.z, heading, true, true, false)
+        elseif Spooner.previewEntityType == "ped" then
+            entity = PED.CREATE_PED(26, Spooner.previewModelHash, pos.x, pos.y, pos.z, heading, true, true)
+        end
+
+        if entity and entity ~= 0 then
+            ENTITY.SET_ENTITY_HEADING(entity, heading)
+            if Spooner.clipToGround then
+                ENTITY.PLACE_ENTITY_ON_GROUND_PROPERLY(entity)
+            end
+            if Spooner.previewEntityType == "vehicle" then
+                VEHICLE.SET_VEHICLE_ON_GROUND_PROPERLY(entity, 0)
+            end
+            NetworkUtils.MakeEntityNetworked(entity)
+            table.insert(Spooner.managedEntities, entity)
+            CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
+        end
+
+        STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(Spooner.previewModelHash)
+    end)
+end
+
+function Spawner.HandleInput()
+    if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
+        return
+    end
+
+    -- Confirm spawn with Enter
+    if Keybinds.ConfirmSpawn.IsPressed() then
+        Spawner.ConfirmSpawn()
+    end
+
+    -- Cancel with Backspace
+    if Keybinds.CancelSpawn.IsPressed() then
+        Spawner.ClearPreview()
+        CustomLogger.Info("Spawn cancelled")
     end
 end
 
@@ -1079,6 +1517,58 @@ function DrawManager.ClickGUIInit()
 
             ClickGUI.EndCustomChildWindow()
         end
+
+        -- Entity Spawner Section
+        if ClickGUI.BeginCustomChildWindow("Entity Spawner") then
+            if ImGui.BeginTabBar("SpawnerTabs", 0) then
+                -- Props Tab
+                if ImGui.BeginTabItem("Props") then
+                    for categoryName, props in pairs(EntityLists.Props) do
+                        if ImGui.CollapsingHeader(categoryName .. "##Props") then
+                            for _, prop in ipairs(props) do
+                                local displayName = prop.name
+                                if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
+                                    Spawner.SpawnProp(prop.hash)
+                                end
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                -- Vehicles Tab
+                if ImGui.BeginTabItem("Vehicles") then
+                    for categoryName, vehicles in pairs(EntityLists.Vehicles) do
+                        if ImGui.CollapsingHeader(categoryName .. "##Vehicles") then
+                            for _, vehicle in ipairs(vehicles) do
+                                if ImGui.Selectable(GTA.GetDisplayNameFromHash(Utils.Joaat(vehicle.name)) .. "##veh_" .. vehicle.name) then
+                                    Spawner.SpawnVehicle(vehicle.name)
+                                end
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                -- Peds Tab
+                if ImGui.BeginTabItem("Peds") then
+                    for categoryName, peds in pairs(EntityLists.Peds) do
+                        if ImGui.CollapsingHeader(categoryName .. "##Peds") then
+                            for _, ped in ipairs(peds) do
+                                local displayName = ped.caption ~= "" and ped.caption or ped.name
+                                if ImGui.Selectable(displayName .. "##ped_" .. ped.name) then
+                                    Spawner.SpawnPed(ped.name)
+                                end
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                ImGui.EndTabBar()
+            end
+            ClickGUI.EndCustomChildWindow()
+        end
     end)
 end
 
@@ -1220,6 +1710,9 @@ end
 if Config.clipToGround then
     enableClipToGroundFeature:Toggle()
 end
+
+-- Load entities
+EntityLists.LoadAll()
 
 DrawManager.ClickGUIInit()
 
