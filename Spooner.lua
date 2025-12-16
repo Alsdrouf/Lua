@@ -5,9 +5,31 @@ local nativesPath = menuRootPath .. "\\Assets\\natives.lua"
 FileMgr.CreateDir(menuRootPath)
 FileMgr.CreateDir(menuRootPath .. "\\Assets")
 
---- Taken from constructor4lod credits Elfish-Beaker and WhiteWatermelon
-local nativesURL = "https://raw.githubusercontent.com/Elfish-beaker/object-list/refs/heads/main/natives.lua"
+-- ============================================================================
+-- Constants
+-- ============================================================================
+local CONSTANTS = {
+    NATIVES_URL = "https://raw.githubusercontent.com/Elfish-beaker/object-list/refs/heads/main/natives.lua",
+    NETWORK_TIMEOUT = 1500,
+    NETWORK_TIMEOUT_SHORT = 25,
+    RAYCAST_MAX_DISTANCE = 1000.0,
+    RAYCAST_INTERVAL = 3,
+    RAYCAST_FLAGS = 30, -- vehicles + peds + objects + pickups
+    MIN_GRAB_DISTANCE = 1.0,
+    CAMERA_SPEED = 0.5,
+    CAMERA_ROT_SPEED = 20.0,
+    CAMERA_SPEED_BOOST = 3.0,
+    ROTATION_SPEED = 2.0,
+    ROTATION_SPEED_BOOST = 4.0,
+    SCROLL_SPEED = 0.5,
+    PITCH_CLAMP_MAX = 89.0,
+    PITCH_CLAMP_MIN = -89.0,
+    VELOCITY_MULTIPLIER = 30.0,
+}
 
+-- ============================================================================
+-- Utilities
+-- ============================================================================
 local function DownloadAndSaveLuaFile(url, filePath)
     local curlObject = Curl.Easy()
     curlObject:Setopt(eCurlOption.CURLOPT_URL, url)
@@ -15,6 +37,7 @@ local function DownloadAndSaveLuaFile(url, filePath)
     curlObject:Perform()
 
     while not curlObject:GetFinished() do
+        Script.Yield(0)
     end
 
     local responseCode, responseString = curlObject:GetResponse()
@@ -43,7 +66,7 @@ end
 local function LoadNatives(path)
     if not FileMgr.DoesFileExist(path) then
         Logger.LogInfo("natives.lua not found. Downloading...")
-        if not DownloadAndSaveLuaFile(nativesURL, path) then
+        if not DownloadAndSaveLuaFile(CONSTANTS.NATIVES_URL, path) then
             return false
         end
     end
@@ -58,13 +81,14 @@ local function LoadNatives(path)
 end
 
 LoadNatives(nativesPath)
---- End of credits
 
---- Credits to themilkman554
-local M = {}
+-- ============================================================================
+-- Network Utilities (Credits to themilkman554)
+-- ============================================================================
+local NetworkUtils = {}
 
-M.set_entity_as_networked = function(entity, timeout)
-    local time <const> = Time.GetEpocheMs() + (timeout or 1500)
+function NetworkUtils.SetEntityAsNetworked(entity, timeout)
+    local time = Time.GetEpocheMs() + (timeout or CONSTANTS.NETWORK_TIMEOUT)
     while time > Time.GetEpocheMs() and not NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity) do
         NETWORK.NETWORK_REGISTER_ENTITY_AS_NETWORKED(entity)
         Script.Yield(0)
@@ -72,35 +96,32 @@ M.set_entity_as_networked = function(entity, timeout)
     return NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity)
 end
 
-M.constantize_network_id = function(entity)
-    M.set_entity_as_networked(entity, 25)
-    local net_id <const> = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
-    -- network.set_network_id_can_migrate(net_id, false) -- Caused players unable to drive vehicles
-    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(net_id, true)
-    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(net_id, PLAYER.PLAYER_ID(), true)
-    return net_id
+function NetworkUtils.ConstantizeNetworkId(entity)
+    NetworkUtils.SetEntityAsNetworked(entity, CONSTANTS.NETWORK_TIMEOUT_SHORT)
+    local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, true)
+    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), true)
+    return netId
 end
 
-M.make_entity_networked = function(entity)
+function NetworkUtils.MakeEntityNetworked(entity)
     if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
         ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, true, true)
     end
     ENTITY.SET_ENTITY_SHOULD_FREEZE_WAITING_ON_COLLISION(entity, false)
-    M.constantize_network_id(entity)
+    NetworkUtils.ConstantizeNetworkId(entity)
     NETWORK.SET_NETWORK_ID_CAN_MIGRATE(NETWORK.OBJ_TO_NET(entity), false)
 end
---- End of credits
 
----@class Keybinds
-Keybinds = {}
+-- ============================================================================
+-- Keybinds
+-- ============================================================================
+local Keybinds = {}
 
----@param key number
 function Keybinds.GetAsString(key)
     return PAD.GET_CONTROL_INSTRUCTIONAL_BUTTONS_STRING(0, key, true)
 end
 
----@param key number
----@param func function
 function Keybinds.CreateKeybind(key, func)
     return {
         key = key,
@@ -123,81 +144,164 @@ function Keybinds.GetControlNormal(key)
     return PAD.GET_DISABLED_CONTROL_NORMAL(0, key)
 end
 
-Keybinds.Grab = Keybinds.CreateKeybind(24, Keybinds.IsPressed) -- INPUT_ATTACK Right mouse button / LT
-Keybinds.AddOrRemoveFromList = Keybinds.CreateKeybind(73, Keybinds.IsJustPressed) -- INPUT_COVER_IN_CAR X
-Keybinds.MoveFaster = Keybinds.CreateKeybind(21, Keybinds.IsPressed) -- INPUT_SPRINT Shift
-Keybinds.RotateLeft = Keybinds.CreateKeybind(44, Keybinds.IsPressed) -- INPUT_COVER Q
-Keybinds.RotateRight = Keybinds.CreateKeybind(38, Keybinds.IsPressed) -- INPUT_PICKUP E
-Keybinds.PushEntity = Keybinds.CreateKeybind(14, Keybinds.IsPressed) -- INPUT_WEAPON_WHEEL_NEXT
-Keybinds.PullEntity = Keybinds.CreateKeybind(15, Keybinds.IsPressed) -- INPUT_WEAPON_WHEEL_PREV
-Keybinds.MoveUp = Keybinds.CreateKeybind(22, Keybinds.GetControlNormal) -- INPUT_JUMP
-Keybinds.MoveDown = Keybinds.CreateKeybind(36, Keybinds.GetControlNormal) -- INPUT_SNEAK
-Keybinds.MoveForward = Keybinds.CreateKeybind(32, Keybinds.GetControlNormal) -- INPUT_MOVE_UP
-Keybinds.MoveBackward = Keybinds.CreateKeybind(33, Keybinds.GetControlNormal) -- INPUT_MOVE_DOWN
-Keybinds.MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal) -- INPUT_MOVE_LEFT
-Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal) -- INPUT_MOVE_RIGHT
+Keybinds.Grab = Keybinds.CreateKeybind(24, Keybinds.IsPressed)
+Keybinds.AddOrRemoveFromList = Keybinds.CreateKeybind(73, Keybinds.IsJustPressed)
+Keybinds.MoveFaster = Keybinds.CreateKeybind(21, Keybinds.IsPressed)
+Keybinds.RotateLeft = Keybinds.CreateKeybind(44, Keybinds.IsPressed)
+Keybinds.RotateRight = Keybinds.CreateKeybind(38, Keybinds.IsPressed)
+Keybinds.PushEntity = Keybinds.CreateKeybind(14, Keybinds.IsPressed)
+Keybinds.PullEntity = Keybinds.CreateKeybind(15, Keybinds.IsPressed)
+Keybinds.MoveUp = Keybinds.CreateKeybind(22, Keybinds.GetControlNormal)
+Keybinds.MoveDown = Keybinds.CreateKeybind(36, Keybinds.GetControlNormal)
+Keybinds.MoveForward = Keybinds.CreateKeybind(32, Keybinds.GetControlNormal)
+Keybinds.MoveBackward = Keybinds.CreateKeybind(33, Keybinds.GetControlNormal)
+Keybinds.MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal)
+Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal)
 
----@class CustomLogger
-CustomLogger = {}
+-- ============================================================================
+-- Custom Logger
+-- ============================================================================
+local CustomLogger = {}
 
----@param str string
 function CustomLogger.Info(str)
     Logger.Log(eLogColor.WHITE, pluginName, str)
 end
 
----@param str string
 function CustomLogger.Warn(str)
     Logger.Log(eLogColor.YELLOW, pluginName, str)
 end
 
----@param str string
 function CustomLogger.Error(str)
     Logger.Log(eLogColor.RED, pluginName, str)
 end
 
----@class Spooner
-Spooner = {}
+-- ============================================================================
+-- Camera Utilities
+-- ============================================================================
+local CameraUtils = {}
+
+function CameraUtils.GetBasis(cam)
+    local rot = CAM.GET_CAM_ROT(cam, 2)
+    local radZ = math.rad(rot.z)
+    local radX = math.rad(rot.x)
+
+    local fwd = {
+        x = -math.sin(radZ) * math.cos(radX),
+        y = math.cos(radZ) * math.cos(radX),
+        z = math.sin(radX)
+    }
+
+    local right = {
+        x = math.cos(radZ),
+        y = math.sin(radZ),
+        z = 0.0
+    }
+
+    local up = {
+        x = right.y * fwd.z - right.z * fwd.y,
+        y = right.z * fwd.x - right.x * fwd.z,
+        z = right.x * fwd.y - right.y * fwd.x
+    }
+
+    return fwd, right, up, rot
+end
+
+function CameraUtils.ClampPitch(pitch)
+    if pitch > CONSTANTS.PITCH_CLAMP_MAX then
+        return CONSTANTS.PITCH_CLAMP_MAX
+    elseif pitch < CONSTANTS.PITCH_CLAMP_MIN then
+        return CONSTANTS.PITCH_CLAMP_MIN
+    end
+    return pitch
+end
+
+-- ============================================================================
+-- Memory Management Utilities
+-- ============================================================================
+local MemoryUtils = {}
+
+function MemoryUtils.PerformRaycast(startX, startY, startZ, endX, endY, endZ, flags)
+    local hit = Memory.AllocInt()
+    local endCoords = Memory.Alloc(24)
+    local surfaceNormal = Memory.Alloc(24)
+    local entityHit = Memory.AllocInt()
+
+    local handle = SHAPETEST.START_SHAPE_TEST_LOS_PROBE(
+        startX, startY, startZ,
+        endX, endY, endZ,
+        flags,
+        nil,
+        7
+    )
+
+    local result = {
+        handle = handle,
+        hit = hit,
+        endCoords = endCoords,
+        surfaceNormal = surfaceNormal,
+        entityHit = entityHit
+    }
+
+    return result
+end
+
+function MemoryUtils.GetRaycastResult(raycastData)
+    local resultReady = SHAPETEST.GET_SHAPE_TEST_RESULT(
+        raycastData.handle,
+        raycastData.hit,
+        raycastData.endCoords,
+        raycastData.surfaceNormal,
+        raycastData.entityHit
+    )
+
+    if resultReady == 2 then
+        local hitValue = Memory.ReadInt(raycastData.hit)
+        local entityHitValue = Memory.ReadInt(raycastData.entityHit)
+        return true, hitValue, entityHitValue
+    end
+
+    return false, nil, nil
+end
+
+function MemoryUtils.FreeRaycastData(raycastData)
+    Memory.Free(raycastData.hit)
+    Memory.Free(raycastData.endCoords)
+    Memory.Free(raycastData.surfaceNormal)
+    Memory.Free(raycastData.entityHit)
+end
+
+-- ============================================================================
+-- Spooner Core
+-- ============================================================================
+local Spooner = {}
 Spooner.inSpoonerMode = false
 Spooner.freecam = nil
-Spooner.camSpeed = 0.5
-Spooner.camRotSpeed = 20.0
-Spooner.crosshairColor = {
-    r = 255,
-    g = 255,
-    b = 255,
-    a = 255
-} -- White by default
-Spooner.crosshairSize = 0.01 -- Size of the crosshair lines
-Spooner.crosshairGap = 0 -- Gap from center
-Spooner.lastEntityPos = nil -- for velocity calculation
-Spooner.grabVelocity = {
-    x = 0,
-    y = 0,
-    z = 0
-} -- Store current grab velocity
-Spooner.crosshairThickness = 0.001 -- Thickness of the crosshair lines
-Spooner.crosshairColorGreen = {
-    r = 0,
-    g = 255,
-    b = 0,
-    a = 255
-} -- Green when targeting entity
+Spooner.camSpeed = CONSTANTS.CAMERA_SPEED
+Spooner.camRotSpeed = CONSTANTS.CAMERA_ROT_SPEED
+Spooner.crosshairColor = {r = 255, g = 255, b = 255, a = 255}
+Spooner.crosshairSize = 0.01
+Spooner.crosshairGap = 0
+Spooner.crosshairThickness = 0.001
+Spooner.crosshairColorGreen = {r = 0, g = 255, b = 0, a = 255}
+Spooner.lastEntityPos = nil
+Spooner.grabVelocity = {x = 0, y = 0, z = 0}
 Spooner.targetedEntity = nil
 Spooner.raycastHandle = nil
+Spooner.raycastData = nil
 Spooner.raycastFrameCounter = 0
 Spooner.isEntityTargeted = false
 Spooner.grabbedEntity = nil
-Spooner.grabDistance = 0
+Spooner.grabOffsets = nil
+Spooner.grabbedEntityRotation = nil
 Spooner.isGrabbing = false
 Spooner.scaleform = nil
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
 Spooner.makeMissionEntity = false
-Spooner.throwableVelocityMultiplier = 30.0
+Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 
 function Spooner.TakeControlOfEntity(entity)
-    -- Request network control of the entity
     if not NETWORK.NETWORK_HAS_CONTROL_OF_ENTITY(entity) then
         NETWORK.NETWORK_REQUEST_CONTROL_OF_ENTITY(entity)
 
@@ -207,7 +311,7 @@ function Spooner.TakeControlOfEntity(entity)
         end
     end
 
-    M.make_entity_networked(entity)
+    NetworkUtils.MakeEntityNetworked(entity)
 end
 
 function Spooner.IsEntityRestricted(entity)
@@ -215,12 +319,10 @@ function Spooner.IsEntityRestricted(entity)
         return true
     end
 
-    -- Check if entity is a player
     if ENTITY.IS_ENTITY_A_PED(entity) and PED.IS_PED_A_PLAYER(entity) and entity ~= PLAYER.PLAYER_PED_ID() then
         return true
     end
 
-    -- Check if entity is a vehicle driven by another player
     if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
         local driver = VEHICLE.GET_PED_IN_VEHICLE_SEAT(entity, -1)
         if driver ~= 0 and PED.IS_PED_A_PLAYER(driver) and driver ~= PLAYER.PLAYER_PED_ID() then
@@ -231,234 +333,175 @@ function Spooner.IsEntityRestricted(entity)
     return false
 end
 
-function Spooner.GetCamBasis(cam)
-    local rot = CAM.GET_CAM_ROT(cam, 2)
-    local radZ = math.rad(rot.z)
-    local radX = math.rad(rot.x)
-
-    -- Forward Vector
-    local fwd = {
-        x = -math.sin(radZ) * math.cos(radX),
-        y = math.cos(radZ) * math.cos(radX),
-        z = math.sin(radX)
+function Spooner.CalculateNewPosition(camPos, fwd, right, up, offsets)
+    return {
+        x = camPos.x + (right.x * offsets.x) + (fwd.x * offsets.y) + (up.x * offsets.z),
+        y = camPos.y + (right.y * offsets.x) + (fwd.y * offsets.y) + (up.y * offsets.z),
+        z = camPos.z + (right.z * offsets.x) + (fwd.z * offsets.y) + (up.z * offsets.z)
     }
-
-    -- Right Vector (assuming no roll and Z-up world)
-    -- Cross(Forward, WorldUp) -> WorldUp is (0,0,1)
-    -- This results in a horizontal right vector
-    local right = {
-        x = math.cos(radZ),
-        y = math.sin(radZ),
-        z = 0.0
-    }
-
-    -- Camera Up Vector
-    -- Cross(Right, Forward)
-    local up = {
-        x = right.y * fwd.z - right.z * fwd.y, -- ry*fz - 0
-        y = right.z * fwd.x - right.x * fwd.z, -- 0 - rx*fz
-        z = right.x * fwd.y - right.y * fwd.x -- rx*fy - ry*fx
-    }
-
-    return fwd, right, up, rot
 end
 
-function Spooner.HandleEntityGrabbing()
-    if not Spooner.inSpoonerMode or Spooner.freecam == nil then
+function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
+    local vec = {
+        x = entityPos.x - camPos.x,
+        y = entityPos.y - camPos.y,
+        z = entityPos.z - camPos.z
+    }
+
+    return {
+        x = vec.x * right.x + vec.y * right.y + vec.z * right.z,
+        y = vec.x * fwd.x + vec.y * fwd.y + vec.z * fwd.z,
+        z = vec.x * up.x + vec.y * up.y + vec.z * up.z
+    }
+end
+
+function Spooner.StartGrabbing()
+    if Spooner.isGrabbing or not Spooner.isEntityTargeted or Spooner.targetedEntity == nil then
+        return false
+    end
+
+    Spooner.isGrabbing = true
+    Spooner.grabbedEntity = Spooner.targetedEntity
+
+    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+    local entityPos = ENTITY.GET_ENTITY_COORDS(Spooner.grabbedEntity, true)
+    local fwd, right, up, camRot = CameraUtils.GetBasis(Spooner.freecam)
+
+    Spooner.grabOffsets = Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
+    Spooner.grabbedEntityRotation = ENTITY.GET_ENTITY_ROTATION(Spooner.grabbedEntity, 2)
+    Spooner.TakeControlOfEntity(Spooner.grabbedEntity)
+
+    return true
+end
+
+function Spooner.UpdateGrabbedEntity()
+    if not Spooner.isGrabbing or not Spooner.grabbedEntity then
         return
     end
 
-    -- Check if right mouse button is pressed (attack control)
+    Spooner.isEntityTargeted = true
+
+    if not ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
+        Spooner.ReleaseEntity()
+        return
+    end
+
+    Spooner.TakeControlOfEntity(Spooner.grabbedEntity)
+
+    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+    local fwd, right, up, camRot = CameraUtils.GetBasis(Spooner.freecam)
+
+    local speedMultiplier = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or 1.0
+
+    local scrollSpeed = CONSTANTS.SCROLL_SPEED * speedMultiplier
+    if Keybinds.PushEntity.IsPressed() then
+        Spooner.grabOffsets.y = math.max(Spooner.grabOffsets.y - scrollSpeed, CONSTANTS.MIN_GRAB_DISTANCE)
+    elseif Keybinds.PullEntity.IsPressed() then
+        Spooner.grabOffsets.y = Spooner.grabOffsets.y + scrollSpeed
+    end
+
+    local rotationSpeed = CONSTANTS.ROTATION_SPEED * speedMultiplier
+    if Keybinds.RotateRight.IsPressed() then
+        Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z - rotationSpeed
+    elseif Keybinds.RotateLeft.IsPressed() then
+        Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z + rotationSpeed
+    end
+
+    local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.grabOffsets)
+
+    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.grabbedEntity, newPos.x, newPos.y, newPos.z, false, false, false)
+    ENTITY.SET_ENTITY_ROTATION(
+        Spooner.grabbedEntity,
+        Spooner.grabbedEntityRotation.x,
+        Spooner.grabbedEntityRotation.y,
+        Spooner.grabbedEntityRotation.z,
+        2,
+        true
+    )
+
+    if Spooner.throwableMode then
+        if Spooner.lastEntityPos then
+            Spooner.grabVelocity = {
+                x = (newPos.x - Spooner.lastEntityPos.x) * Spooner.throwableVelocityMultiplier,
+                y = (newPos.y - Spooner.lastEntityPos.y) * Spooner.throwableVelocityMultiplier,
+                z = (newPos.z - Spooner.lastEntityPos.z) * Spooner.throwableVelocityMultiplier
+            }
+        end
+        Spooner.lastEntityPos = newPos
+    end
+end
+
+function Spooner.ReleaseEntity()
+    if not Spooner.isGrabbing or not Spooner.grabbedEntity then
+        return
+    end
+
+    if ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) and Spooner.throwableMode then
+        ENTITY.APPLY_FORCE_TO_ENTITY(
+            Spooner.grabbedEntity,
+            1,
+            Spooner.grabVelocity.x,
+            Spooner.grabVelocity.y,
+            Spooner.grabVelocity.z,
+            0.0, 0.0, 0.0,
+            0,
+            false,
+            true,
+            true,
+            false,
+            true
+        )
+    end
+
+    Spooner.isGrabbing = false
+    Spooner.grabbedEntity = nil
+    Spooner.lastEntityPos = nil
+    Spooner.grabVelocity = {x = 0, y = 0, z = 0}
+end
+
+function Spooner.HandleEntityGrabbing()
+    if not Spooner.inSpoonerMode or not Spooner.freecam then
+        return
+    end
+
     local isRightClickPressed = Keybinds.Grab.IsPressed()
 
-    -- Keep grabbing if already holding, or start grabbing if targeting entity
-    if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity ~= nil)) then
-        -- Start grabbing
+    if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
         if not Spooner.isGrabbing then
-            Spooner.isGrabbing = true
-            Spooner.grabbedEntity = Spooner.targetedEntity
-
-            local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
-            local entityPos = ENTITY.GET_ENTITY_COORDS(Spooner.grabbedEntity, true)
-
-            -- Get Camera Basis Vectors
-            local fwd, right, up, camRot = Spooner.GetCamBasis(Spooner.freecam)
-
-            -- Vector from Camera to Entity
-            local vec = {
-                x = entityPos.x - camPos.x,
-                y = entityPos.y - camPos.y,
-                z = entityPos.z - camPos.z
-            }
-
-            -- Project onto Basis Vectors to get relative offsets
-            -- Dot Product
-            Spooner.grabOffsets = {
-                x = vec.x * right.x + vec.y * right.y + vec.z * right.z, -- Right offset
-                y = vec.x * fwd.x + vec.y * fwd.y + vec.z * fwd.z, -- Forward offset (Distance)
-                z = vec.x * up.x + vec.y * up.y + vec.z * up.z -- Up offset
-            }
-
-            -- Store current world rotation
-            Spooner.grabbedEntityRotation = ENTITY.GET_ENTITY_ROTATION(Spooner.grabbedEntity, 2)
-
-            Spooner.TakeControlOfEntity(Spooner.grabbedEntity)
+            Spooner.StartGrabbing()
         end
-
-        -- Move the grabbed entity
-        if Spooner.isGrabbing and Spooner.grabbedEntity ~= nil then
-            -- Keep crosshair green while holding
-            Spooner.isEntityTargeted = true
-
-            if ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
-                -- Ensure we have network control
-                Spooner.TakeControlOfEntity(Spooner.grabbedEntity)
-
-                local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
-                local fwd, right, up, camRot = Spooner.GetCamBasis(Spooner.freecam)
-
-                -- Check speed boost (Shift / A button)
-                local speedMultiplier = 1.0
-                if Keybinds.MoveFaster.IsPressed() then
-                    speedMultiplier = 4.0
-                end
-
-                -- Check for scroll wheel to adjust distance (Offset Y)
-                local scrollSpeed = 0.5 * speedMultiplier
-                if Keybinds.PushEntity.IsPressed() then
-                    Spooner.grabOffsets.y = Spooner.grabOffsets.y - scrollSpeed
-                elseif Keybinds.PullEntity.IsPressed() then
-                    Spooner.grabOffsets.y = Spooner.grabOffsets.y + scrollSpeed
-                end
-
-                if Spooner.grabOffsets.y < 1.0 then -- Min distance check
-                    Spooner.grabOffsets.y = 1.0
-                end
-
-                -- Check if rotation keys are pressed (Q/E)
-                local rotateRight = Keybinds.RotateRight.IsPressed()
-                local rotateLeft = Keybinds.RotateLeft.IsPressed()
-                local rotationSpeed = 2.0 * speedMultiplier -- degrees per frame
-
-                if rotateRight then
-                    Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z - rotationSpeed
-                elseif rotateLeft then
-                    Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z + rotationSpeed
-                end
-
-                -- Calculate New Position based on updated Camera + Offsets
-                local newX = camPos.x + (right.x * Spooner.grabOffsets.x) + (fwd.x * Spooner.grabOffsets.y) +
-                                 (up.x * Spooner.grabOffsets.z)
-                local newY = camPos.y + (right.y * Spooner.grabOffsets.x) + (fwd.y * Spooner.grabOffsets.y) +
-                                 (up.y * Spooner.grabOffsets.z)
-                local newZ = camPos.z + (right.z * Spooner.grabOffsets.x) + (fwd.z * Spooner.grabOffsets.y) +
-                                 (up.z * Spooner.grabOffsets.z)
-
-                -- Move the entity
-                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.grabbedEntity, newX, newY, newZ, false, false, false)
-
-                -- Update Rotation (Absolute World Rotation - decoupled from cam)
-                ENTITY.SET_ENTITY_ROTATION(Spooner.grabbedEntity, Spooner.grabbedEntityRotation.x,
-                    Spooner.grabbedEntityRotation.y, Spooner.grabbedEntityRotation.z, 2, true)
-
-                if Spooner.throwableMode then
-                    -- Calculate and store velocity (displacement since last frame)
-                    if Spooner.lastEntityPos then
-                        -- Multiplier needs to be high because this is per-frame displacement (approx 1/60th of a second)
-                        -- We want units per second roughly.
-                        local velocityMult = Spooner.throwableVelocityMultiplier
-                        Spooner.grabVelocity = {
-                            x = (newX - Spooner.lastEntityPos.x) * velocityMult,
-                            y = (newY - Spooner.lastEntityPos.y) * velocityMult,
-                            z = (newZ - Spooner.lastEntityPos.z) * velocityMult
-                        }
-                    end
-
-                    -- Store current pos for next frame velocity calc
-                    Spooner.lastEntityPos = {
-                        x = newX,
-                        y = newY,
-                        z = newZ
-                    }
-                end
-            else
-                -- Entity was deleted
-                Spooner.isGrabbing = false
-                Spooner.grabbedEntity = nil
-                Spooner.lastEntityPos = nil
-            end
-        end
+        Spooner.UpdateGrabbedEntity()
     else
-        -- Release the entity
-        if Spooner.isGrabbing and Spooner.grabbedEntity ~= nil then
-            if ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
-                -- Apply the velocity calculated during the grab as a force (Impulse)
-                -- ForceType 1 (Strong Force / Impulse) seems best for throws
-                if Spooner.throwableMode then
-                    ENTITY.APPLY_FORCE_TO_ENTITY(Spooner.grabbedEntity, 1, Spooner.grabVelocity.x,
-                        Spooner.grabVelocity.y, Spooner.grabVelocity.z, 0.0, 0.0, 0.0, -- Offset (center)
-                        0, -- Bone index
-                        false, -- isDirectionRel
-                        true, -- ignoreUpVec
-                        true, -- isForceRel
-                        false, -- p12
-                        true -- p13 (isMassRel)
-                    )
-                end
-            end
-
-            Spooner.isGrabbing = false
-            Spooner.grabbedEntity = nil
-            Spooner.lastEntityPos = nil
-            Spooner.grabVelocity = {
-                x = 0,
-                y = 0,
-                z = 0
-            }
-        end
+        Spooner.ReleaseEntity()
     end
 end
 
 function Spooner.UpdateFreecam()
-    if not Spooner.inSpoonerMode or Spooner.freecam == nil then
+    if not Spooner.inSpoonerMode or not Spooner.freecam then
         return
     end
 
     PAD.DISABLE_ALL_CONTROL_ACTIONS(0)
 
-    -- Get current camera position and rotation
     local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
     local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)
 
-    -- Get input for camera rotation (mouse/right stick)
-    local rightAxisX = PAD.GET_DISABLED_CONTROL_NORMAL(0, 220) -- Right stick X / Mouse X
-    local rightAxisY = PAD.GET_DISABLED_CONTROL_NORMAL(0, 221) -- Right stick Y / Mouse Y
+    local rightAxisX = PAD.GET_DISABLED_CONTROL_NORMAL(0, 220)
+    local rightAxisY = PAD.GET_DISABLED_CONTROL_NORMAL(0, 221)
 
-    -- Update rotation
     camRot.z = camRot.z - (rightAxisX * Spooner.camRotSpeed)
-    camRot.x = camRot.x - (rightAxisY * Spooner.camRotSpeed)
-    camRot.y = 0.0 -- Force horizontal
+    camRot.x = CameraUtils.ClampPitch(camRot.x - (rightAxisY * Spooner.camRotSpeed))
+    camRot.y = 0.0
 
-    -- Clamp pitch to prevent flipping
-    if camRot.x > 89.0 then
-        camRot.x = 89.0
-    end
-    if camRot.x < -89.0 then
-        camRot.x = -89.0
-    end
-
-    -- Calculate forward/right vectors based on rotation
     local radZ = math.rad(camRot.z)
     local radX = math.rad(camRot.x)
 
     local forwardX = -math.sin(radZ) * math.cos(radX)
     local forwardY = math.cos(radZ) * math.cos(radX)
     local forwardZ = math.sin(radX)
-
     local rightX = math.cos(radZ)
     local rightY = math.sin(radZ)
 
-    -- Get movement input (WASD / Left stick)
     local moveForward = Keybinds.MoveForward.IsPressed()
     local moveBackward = Keybinds.MoveBackward.IsPressed()
     local moveLeft = Keybinds.MoveLeft.IsPressed()
@@ -466,29 +509,22 @@ function Spooner.UpdateFreecam()
     local moveUp = Keybinds.MoveUp.IsPressed()
     local moveDown = Keybinds.MoveDown.IsPressed()
 
-    -- Apply movement
     local speed = Spooner.camSpeed
     if Keybinds.MoveFaster.IsPressed() then
-        speed = speed * 3.0
+        speed = speed * CONSTANTS.CAMERA_SPEED_BOOST
     end
 
     camPos.x = camPos.x + (forwardX * (moveForward - moveBackward) * speed)
     camPos.y = camPos.y + (forwardY * (moveForward - moveBackward) * speed)
     camPos.z = camPos.z + (forwardZ * (moveForward - moveBackward) * speed)
-
     camPos.x = camPos.x + (rightX * (moveRight - moveLeft) * speed)
     camPos.y = camPos.y + (rightY * (moveRight - moveLeft) * speed)
-
     camPos.z = camPos.z + ((moveUp - moveDown) * speed)
 
-    -- Update camera
     CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
     CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
 
-    -- Focus streaming around camera to prevent LOD issues
     STREAMING.SET_FOCUS_POS_AND_VEL(camPos.x, camPos.y, camPos.z, 0.0, 0.0, 0.0)
-
-    -- Update minimap to follow camera
     HUD.LOCK_MINIMAP_POSITION(camPos.x, camPos.y)
 end
 
@@ -499,32 +535,22 @@ function Spooner.ToggleSpoonerMode(f)
 
     Spooner.inSpoonerMode = f
     if Spooner.inSpoonerMode then
-        -- Enable freecam
-        -- Get the current gameplay/ped camera position and rotation
         local camPos = CAM.GET_GAMEPLAY_CAM_COORD()
         local camRot = CAM.GET_GAMEPLAY_CAM_ROT(2)
 
-        -- Create a render camera at the gameplay camera position
         Spooner.freecam = CAM.CREATE_CAM("DEFAULT_SCRIPTED_CAMERA", true)
         CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
         CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, 0.0, camRot.z, 2)
         CAM.SET_CAM_ACTIVE(Spooner.freecam, true)
         CAM.RENDER_SCRIPT_CAMS(true, false, 0, true, false, 0)
-
-        -- Sync minimap rotation with camera
         CAM.SET_CAM_CONTROLS_MINI_MAP_HEADING(Spooner.freecam, true)
 
         CustomLogger.Info("Freecam enabled")
     else
-        -- Disable freecam
-        if Spooner.freecam ~= nil then
-            -- Restore streaming focus
+        if Spooner.freecam then
             STREAMING.CLEAR_FOCUS()
-
-            -- Unlock minimap
             HUD.UNLOCK_MINIMAP_POSITION()
             HUD.UNLOCK_MINIMAP_ANGLE()
-
             CAM.RENDER_SCRIPT_CAMS(false, false, 0, true, false, 0)
             CAM.SET_CAM_ACTIVE(Spooner.freecam, false)
             CAM.DESTROY_CAM(Spooner.freecam, false)
@@ -534,12 +560,29 @@ function Spooner.ToggleSpoonerMode(f)
     end
 end
 
+function Spooner.ToggleEntityInManagedList(entity)
+    if not entity then
+        return
+    end
+
+    for i, e in ipairs(Spooner.managedEntities) do
+        if e == entity then
+            table.remove(Spooner.managedEntities, i)
+            CustomLogger.Info("Removed entity from managed list: " .. tostring(entity))
+            return
+        end
+    end
+
+    Spooner.TakeControlOfEntity(entity)
+    table.insert(Spooner.managedEntities, entity)
+    CustomLogger.Info("Entity added to managed list: " .. tostring(entity))
+end
+
 function Spooner.ManageEntities()
     if not Spooner.inSpoonerMode then
         return
     end
 
-    -- Handle 'X' key press to add entity
     if Keybinds.AddOrRemoveFromList.IsPressed() then
         local entityToAdd = nil
 
@@ -550,39 +593,13 @@ function Spooner.ManageEntities()
         end
 
         if entityToAdd then
-            local alreadyAdded = false
-
-            -- Check for duplicates
-            for _, e in ipairs(Spooner.managedEntities) do
-                if e == entityToAdd then
-                    alreadyAdded = true
-                    break
-                end
-            end
-
-            if not alreadyAdded then
-                -- Request network control
-                Spooner.TakeControlOfEntity(entityToAdd)
-
-                table.insert(Spooner.managedEntities, entityToAdd)
-                CustomLogger.Info("Entity added to managed list: " .. tostring(entityToAdd))
-            else
-                for i, e in ipairs(Spooner.managedEntities) do
-                    if e == entityToAdd then
-                        table.remove(Spooner.managedEntities, i)
-                        CustomLogger.Info("Removed entity from managed list: " .. tostring(entityToAdd))
-                        break
-                    end
-                end
-            end
+            Spooner.ToggleEntityInManagedList(entityToAdd)
         end
     end
 
-    -- Cleanup invalid entities and maintain control
     for i = #Spooner.managedEntities, 1, -1 do
         local entity = Spooner.managedEntities[i]
         if ENTITY.DOES_ENTITY_EXIST(entity) then
-            -- Maintain network control
             Spooner.TakeControlOfEntity(entity)
         else
             table.remove(Spooner.managedEntities, i)
@@ -591,72 +608,16 @@ function Spooner.ManageEntities()
     end
 end
 
--- Drawing
+-- ============================================================================
+-- Draw Manager
+-- ============================================================================
+local DrawManager = {}
 
---- @class DrawManager
-DrawManager = {}
+function DrawManager.PerformRaycastCheck()
+    if Spooner.raycastData then
+        local ready, hitValue, entityHitValue = MemoryUtils.GetRaycastResult(Spooner.raycastData)
 
-function DrawManager.DrawCrosshair()
-    if not Spooner.inSpoonerMode then
-        return
-    end
-
-    local color = Spooner.crosshairColor
-    local size = Spooner.crosshairSize
-    local gap = Spooner.crosshairGap
-
-    -- Get screen resolution to calculate aspect ratio
-    local aspectRatio = GRAPHICS.GET_SCREEN_ASPECT_RATIO()
-
-    -- Only perform raycast every 3 frames to reduce performance impact (and skip if already grabbing)
-    if not Spooner.isGrabbing then
-        Spooner.raycastFrameCounter = Spooner.raycastFrameCounter + 1
-        if Spooner.raycastFrameCounter >= 3 then
-            Spooner.raycastFrameCounter = 0
-
-            -- Raycast from camera to detect entity at crosshair center
-            local camCoord = CAM.GET_CAM_COORD(Spooner.freecam)
-            local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)
-
-            -- Calculate forward direction from camera rotation
-            local radZ = math.rad(camRot.z)
-            local radX = math.rad(camRot.x)
-            local forwardX = -math.sin(radZ) * math.cos(radX)
-            local forwardY = math.cos(radZ) * math.cos(radX)
-            local forwardZ = math.sin(radX)
-
-            -- Raycast endpoint (1000 units forward)
-            local endX = camCoord.x + forwardX * 1000.0
-            local endY = camCoord.y + forwardY * 1000.0
-            local endZ = camCoord.z + forwardZ * 1000.0
-
-            -- Perform async raycast (non-blocking)
-            -- Flags: 2 (vehicles) + 4 (peds) + 16 (objects) + 8 (pickups) = 30
-            -- This excludes world geometry (buildings, terrain)
-            local playerPed = PLAYER.PLAYER_PED_ID()
-            Spooner.raycastHandle = SHAPETEST.START_SHAPE_TEST_LOS_PROBE(camCoord.x, camCoord.y, camCoord.z, endX, endY,
-                endZ, 30, -- flags: vehicles + peds + objects + pickups (no world)
-                nil, 7 -- shape test type
-            )
-        end
-    end
-
-    -- Check if raycast result is ready
-    if Spooner.raycastHandle then
-        local hit = Memory.AllocInt()
-        local endCoords = Memory.Alloc(24)
-        local surfaceNormal = Memory.Alloc(24)
-        local entityHit = Memory.AllocInt()
-
-        local resultReady = SHAPETEST.GET_SHAPE_TEST_RESULT(Spooner.raycastHandle, hit, endCoords, surfaceNormal,
-            entityHit)
-
-        -- Only process if result is ready (resultReady == 2 means complete)
-        if resultReady == 2 then
-            local hitValue = Memory.ReadInt(hit)
-            local entityHitValue = Memory.ReadInt(entityHit)
-
-            -- Change color to green if entity is hit and restricted checks pass
+        if ready then
             if hitValue == 1 and entityHitValue ~= 0 and not Spooner.IsEntityRestricted(entityHitValue) then
                 Spooner.isEntityTargeted = true
                 Spooner.targetedEntity = entityHitValue
@@ -665,36 +626,77 @@ function DrawManager.DrawCrosshair()
                 Spooner.targetedEntity = nil
             end
 
-            Spooner.raycastHandle = nil
+            MemoryUtils.FreeRaycastData(Spooner.raycastData)
+            Spooner.raycastData = nil
         end
-
-        Memory.Free(hit)
-        Memory.Free(endCoords)
-        Memory.Free(surfaceNormal)
-        Memory.Free(entityHit)
     end
 
-    -- Use cached result for color
-    if Spooner.isEntityTargeted then
-        color = Spooner.crosshairColorGreen
+    if not Spooner.isGrabbing then
+        Spooner.raycastFrameCounter = Spooner.raycastFrameCounter + 1
+        if Spooner.raycastFrameCounter >= CONSTANTS.RAYCAST_INTERVAL then
+            Spooner.raycastFrameCounter = 0
+
+            local camCoord = CAM.GET_CAM_COORD(Spooner.freecam)
+            local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)
+
+            local radZ = math.rad(camRot.z)
+            local radX = math.rad(camRot.x)
+            local forwardX = -math.sin(radZ) * math.cos(radX)
+            local forwardY = math.cos(radZ) * math.cos(radX)
+            local forwardZ = math.sin(radX)
+
+            local endX = camCoord.x + forwardX * CONSTANTS.RAYCAST_MAX_DISTANCE
+            local endY = camCoord.y + forwardY * CONSTANTS.RAYCAST_MAX_DISTANCE
+            local endZ = camCoord.z + forwardZ * CONSTANTS.RAYCAST_MAX_DISTANCE
+
+            Spooner.raycastData = MemoryUtils.PerformRaycast(
+                camCoord.x, camCoord.y, camCoord.z,
+                endX, endY, endZ,
+                CONSTANTS.RAYCAST_FLAGS
+            )
+        end
+    end
+end
+
+function DrawManager.DrawCrosshair()
+    if not Spooner.inSpoonerMode then
+        return
     end
 
-    -- Adjust size for aspect ratio so lines appear same length
-    local sizeX = size / aspectRatio -- Horizontal size (width)
-    local sizeY = size -- Vertical size (height)
+    DrawManager.PerformRaycastCheck()
 
-    -- Adjust thickness for aspect ratio so lines appear same thickness
+    local color = Spooner.isEntityTargeted and Spooner.crosshairColorGreen or Spooner.crosshairColor
+    local size = Spooner.crosshairSize
+    local gap = Spooner.crosshairGap
+    local aspectRatio = GRAPHICS.GET_SCREEN_ASPECT_RATIO()
+
+    local sizeX = size / aspectRatio
+    local sizeY = size
     local thicknessX = Spooner.crosshairThickness
     local thicknessY = Spooner.crosshairThickness * aspectRatio
 
-    -- Draw horizontal line (left)
     GRAPHICS.DRAW_RECT(0.5 - gap - sizeX / 2, 0.5, sizeX, thicknessY, color.r, color.g, color.b, color.a, false)
-    -- Draw horizontal line (right)
     GRAPHICS.DRAW_RECT(0.5 + gap + sizeX / 2, 0.5, sizeX, thicknessY, color.r, color.g, color.b, color.a, false)
-    -- Draw vertical line (top)
     GRAPHICS.DRAW_RECT(0.5, 0.5 - gap - sizeY / 2, thicknessX, sizeY, color.r, color.g, color.b, color.a, false)
-    -- Draw vertical line (bottom)
     GRAPHICS.DRAW_RECT(0.5, 0.5 + gap + sizeY / 2, thicknessX, sizeY, color.r, color.g, color.b, color.a, false)
+end
+
+function DrawManager.AddInstructionalButton(buttonIndex, keyString, label)
+    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(keyString)
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(label)
+    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+end
+
+function DrawManager.AddInstructionalButtonMulti(buttonIndex, keyStrings, label)
+    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
+    for _, keyString in ipairs(keyStrings) do
+        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(keyString)
+    end
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(label)
+    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
 end
 
 function DrawManager.DrawInstructionalButtons()
@@ -702,7 +704,6 @@ function DrawManager.DrawInstructionalButtons()
         return
     end
 
-    -- Request scaleform if not loaded
     if not Spooner.scaleform then
         Spooner.scaleform = GRAPHICS.REQUEST_SCALEFORM_MOVIE("instructional_buttons")
     end
@@ -711,11 +712,9 @@ function DrawManager.DrawInstructionalButtons()
         return
     end
 
-    -- Clear previous buttons
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "CLEAR_ALL")
     GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
 
-    -- Toggle mouse buttons off to prevent conflicts
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "TOGGLE_MOUSE_BUTTONS")
     GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_BOOL(false)
     GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
@@ -726,45 +725,28 @@ function DrawManager.DrawInstructionalButtons()
 
     local buttonIndex = 0
 
-    -- Right Click - Grab/Release
-    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.Grab.string)
-    if Spooner.isGrabbing then
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Release Entity")
-    else
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Grab Entity")
-    end
-    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+    local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
+    DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
     buttonIndex = buttonIndex + 1
 
-    -- Rotation
     if Spooner.isGrabbing then
-        GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.RotateLeft.string)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.RotateRight.string)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Rotate Entity")
-        GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
+            "Rotate Entity"
+        )
         buttonIndex = buttonIndex + 1
 
-        -- Push / Pull (Scroll)
-        GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.PushEntity.string)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.PullEntity.string)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Push / Pull Entity")
-        GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
+            "Push / Pull Entity"
+        )
         buttonIndex = buttonIndex + 1
     end
 
-    -- Add to List (X) - When grabbing or targeting
-    local entityToCheck = nil
-    if Spooner.isGrabbing then
-        entityToCheck = Spooner.grabbedEntity
-    elseif Spooner.isEntityTargeted then
-        entityToCheck = Spooner.targetedEntity
-    end
+    local entityToCheck = Spooner.isGrabbing and Spooner.grabbedEntity or
+                          (Spooner.isEntityTargeted and Spooner.targetedEntity or nil)
 
     if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
         local isManaged = false
@@ -775,77 +757,62 @@ function DrawManager.DrawInstructionalButtons()
             end
         end
 
-        GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.AddOrRemoveFromList.string)
-        if isManaged then
-            GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Remove from List")
-        else
-            GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Add to List")
-        end
-        GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+        local listLabel = isManaged and "Remove from List" or "Add to List"
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
         buttonIndex = buttonIndex + 1
     end
 
-    -- Speed
-    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveFaster.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Move Faster")
-    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+    DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
     buttonIndex = buttonIndex + 1
 
-    -- Up/Down
-    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveUp.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveDown.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Up / Down")
-    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+    DrawManager.AddInstructionalButtonMulti(
+        buttonIndex,
+        {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
+        "Up / Down"
+    )
     buttonIndex = buttonIndex + 1
 
-    -- WASD - Move
-    GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveRight.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveLeft.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveBackward.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.MoveForward.string)
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Move Camera")
-    GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+    DrawManager.AddInstructionalButtonMulti(
+        buttonIndex,
+        {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
+        "Move Camera"
+    )
     buttonIndex = buttonIndex + 1
 
-    -- Enter - Spawn at Crosshair
-    if SpawnMenu.selectedModel then
-        GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "SET_DATA_SLOT")
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(buttonIndex)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING(Keybinds.SpawnAtCrosshair.string)
-        GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_PLAYER_NAME_STRING("Spawn: " .. SpawnMenu.selectedModelName)
-        GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
+    if SpawnMenu and SpawnMenu.selectedModel then
+        DrawManager.AddInstructionalButton(
+            buttonIndex,
+            Keybinds.SpawnAtCrosshair.string,
+            "Spawn: " .. SpawnMenu.selectedModelName
+        )
         buttonIndex = buttonIndex + 1
     end
 
-    -- Draw the buttons
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "DRAW_INSTRUCTIONAL_BUTTONS")
-    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(-1) -- Use -1 to force default layout
+    GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(-1)
     GRAPHICS.END_SCALEFORM_MOVIE_METHOD()
 
-    -- Render the scaleform
     GRAPHICS.DRAW_SCALEFORM_MOVIE_FULLSCREEN(Spooner.scaleform, 255, 255, 255, 255, 0)
 end
 
 function DrawManager.GetEntityName(entity)
-    if ENTITY.DOES_ENTITY_EXIST(entity) then
-        local modelHash = ENTITY.GET_ENTITY_MODEL(entity)
-        local modelName = GTA.GetModelNameFromHash(modelHash)
-        if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
-            return "Vehicle - " .. modelName .. " (" .. VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT(entity) .. ")"
-        elseif ENTITY.IS_ENTITY_A_PED(entity) then
-            return "Ped - " .. modelName
-        elseif ENTITY.IS_ENTITY_AN_OBJECT(entity) then
-            return "Object - " .. modelName
-        end
+    if not ENTITY.DOES_ENTITY_EXIST(entity) then
+        return "Invalid Entity"
     end
+
+    local modelHash = ENTITY.GET_ENTITY_MODEL(entity)
+    local modelName = GTA.GetModelNameFromHash(modelHash)
+
+    if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
+        local plate = VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT(entity)
+        return "Vehicle - " .. modelName .. " (" .. plate .. ")"
+    elseif ENTITY.IS_ENTITY_A_PED(entity) then
+        return "Ped - " .. modelName
+    elseif ENTITY.IS_ENTITY_AN_OBJECT(entity) then
+        return "Object - " .. modelName
+    end
+
+    return "Unknown - " .. modelName
 end
 
 function DrawManager.DrawSelectedEntityMarker()
@@ -857,13 +824,15 @@ function DrawManager.DrawSelectedEntityMarker()
         local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
         if ENTITY.DOES_ENTITY_EXIST(entity) then
             local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
-            -- Draw a red debug sphere on the entity to highlight it
-            GRAPHICS.DRAW_MARKER(28, -- type: DebugSphere
-            pos.x, pos.y, pos.z, 0.0, 0.0, 0.0, -- dir
-            0.0, 0.0, 0.0, -- rot
-            0.3, 0.3, 0.3, -- scale
-            255, 0, 0, 150, -- r, g, b, alpha
-            false, false, 2, false, nil, nil, false)
+            GRAPHICS.DRAW_MARKER(
+                28,
+                pos.x, pos.y, pos.z,
+                0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0,
+                0.3, 0.3, 0.3,
+                255, 0, 0, 150,
+                false, false, 2, false, nil, nil, false
+            )
         end
     end
 end
@@ -879,23 +848,13 @@ function DrawManager.ClickGUIInit()
             ImGui.Separator()
             ImGui.Text("Managed Entities Database")
 
-            -- Entity Selection Dropdown
             local previewValue = "None"
             if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
                 local ent = Spooner.managedEntities[Spooner.selectedEntityIndex]
-                if ENTITY.DOES_ENTITY_EXIST(ent) then
-                    previewValue = DrawManager.GetEntityName(ent)
-                else
-                    previewValue = "Invalid Entity"
-                end
-            else
-                if #Spooner.managedEntities > 0 then
-                    Spooner.selectedEntityIndex = 1 -- Auto-select first if we have entities but bad index
-                    local ent = Spooner.managedEntities[1]
-                    if ENTITY.DOES_ENTITY_EXIST(ent) then
-                        previewValue = DrawManager.GetEntityName(ent)
-                    end
-                end
+                previewValue = DrawManager.GetEntityName(ent)
+            elseif #Spooner.managedEntities > 0 then
+                Spooner.selectedEntityIndex = 1
+                previewValue = DrawManager.GetEntityName(Spooner.managedEntities[1])
             end
 
             if ImGui.BeginCombo("Select Entity", previewValue) then
@@ -904,7 +863,6 @@ function DrawManager.ClickGUIInit()
                 else
                     for i, entity in ipairs(Spooner.managedEntities) do
                         local label = DrawManager.GetEntityName(entity)
-                        -- Append hidden ID to ensure uniqueness for ImGui if names are identical
                         local isSelected = (i == Spooner.selectedEntityIndex)
                         if ImGui.Selectable(label .. "##" .. i, isSelected) then
                             Spooner.selectedEntityIndex = i
@@ -924,15 +882,15 @@ function DrawManager.ClickGUIInit()
         end
     end)
 
-    -- Add Spawn Menu tab for ClickGUI
     ClickGUI.AddTab("Spawn Menu", function()
         if ClickGUI.BeginCustomChildWindow("SpawnMenu") then
-            -- Render spawn categories
-            for _, category in ipairs(SpawnMenu.objects) do
-                if ImGui.CollapsingHeader(category.name) then
-                    for _, item in ipairs(category.items) do
-                        local itemHash = Utils.Joaat("SpawnMenu_" .. item.model)
-                        ClickGUI.RenderFeature(itemHash)
+            if SpawnMenu and SpawnMenu.objects then
+                for _, category in ipairs(SpawnMenu.objects) do
+                    if ImGui.CollapsingHeader(category.name) then
+                        for _, item in ipairs(category.items) do
+                            local itemHash = Utils.Joaat("SpawnMenu_" .. item.model)
+                            ClickGUI.RenderFeature(itemHash)
+                        end
                     end
                 end
             end
@@ -942,37 +900,56 @@ function DrawManager.ClickGUIInit()
     end)
 end
 
+-- ============================================================================
 -- Features
-local toggleSpoonerModeFeature = FeatureMgr.AddFeature(Utils.Joaat("ToggleSpoonerMode"), "Toggle Spooner Mode",
-    eFeatureType.Toggle, "Toggle Spooner Mode", function(f)
+-- ============================================================================
+local toggleSpoonerModeFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("ToggleSpoonerMode"),
+    "Toggle Spooner Mode",
+    eFeatureType.Toggle,
+    "Toggle Spooner Mode",
+    function(f)
         Spooner.ToggleSpoonerMode(f:IsToggled())
-    end)
+    end
+)
 
-local makeMissionEntityFeature = FeatureMgr.AddFeature(Utils.Joaat("Spooner_MakeMissionEntity"),
-    "Set as Mission Entity", eFeatureType.Toggle, "Automatically set entities as mission entities (Better networking)",
+local makeMissionEntityFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_MakeMissionEntity"),
+    "Set as Mission Entity",
+    eFeatureType.Toggle,
+    "Automatically set entities as mission entities (Better networking)",
     function(f)
         Spooner.makeMissionEntity = f:IsToggled()
-    end)
+    end
+)
 makeMissionEntityFeature:Toggle()
 
-FeatureMgr.AddFeature(Utils.Joaat("Spooner_RemoveEntity"), "Remove from List", eFeatureType.Button,
-    "Remove selected entity from tracking", function(f)
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_RemoveEntity"),
+    "Remove from List",
+    eFeatureType.Button,
+    "Remove selected entity from tracking",
+    function(f)
         if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
             table.remove(Spooner.managedEntities, Spooner.selectedEntityIndex)
         else
             GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
-    end)
+    end
+)
 
-FeatureMgr.AddFeature(Utils.Joaat("Spooner_DeleteEntity"), "Delete Entity", eFeatureType.Button,
-    "Delete selected entity from the game", function(f)
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_DeleteEntity"),
+    "Delete Entity",
+    eFeatureType.Button,
+    "Delete selected entity from the game",
+    function(f)
         if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
             local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
 
             CustomLogger.Info("Deleting entity: " .. tostring(entity))
 
             if ENTITY.DOES_ENTITY_EXIST(entity) then
-                -- Move deletion to a job to allow for control request delays
                 Script.QueueJob(function()
                     Spooner.TakeControlOfEntity(entity)
 
@@ -987,36 +964,43 @@ FeatureMgr.AddFeature(Utils.Joaat("Spooner_DeleteEntity"), "Delete Entity", eFea
                     CustomLogger.Info("Deleted entity: " .. tostring(entity))
                 end)
 
-                -- Remove from list immediately
                 table.remove(Spooner.managedEntities, Spooner.selectedEntityIndex)
             end
         else
             GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
-    end)
+    end
+)
 
-FeatureMgr.AddFeature(Utils.Joaat("Spooner_EnableF9Key"), "Enable F9 Key", eFeatureType.Toggle,
-    "Enable F9 key to toggle freecam", function(f)
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_EnableF9Key"),
+    "Enable F9 Key",
+    eFeatureType.Toggle,
+    "Enable F9 key to toggle freecam",
+    function(f)
         if f:IsToggled() then
             toggleSpoonerModeFeature:AddHotKey(120)
         else
             toggleSpoonerModeFeature:RemoveHotkey(120, false)
         end
-    end)
+    end
+)
 
-FeatureMgr.AddFeature(Utils.Joaat("Spooner_EnableThrowableMode"), "Enable Throwable Mode", eFeatureType.Toggle,
-    "Enable Throwable Mode", function(f)
-        if f:IsToggled() then
-            Spooner.throwableMode = true
-        else
-            Spooner.throwableMode = false
-        end
-    end)
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_EnableThrowableMode"),
+    "Enable Throwable Mode",
+    eFeatureType.Toggle,
+    "Enable Throwable Mode",
+    function(f)
+        Spooner.throwableMode = f:IsToggled()
+    end
+)
 
--- Initialize ClickGUI
+-- ============================================================================
+-- Initialization
+-- ============================================================================
 DrawManager.ClickGUIInit()
 
--- Update freecam every frame
 Script.RegisterLooped(function()
     Spooner.UpdateFreecam()
     DrawManager.DrawCrosshair()
