@@ -29,6 +29,23 @@ local CONSTANTS = {
 }
 
 -- ============================================================================
+-- Custom Logger
+-- ============================================================================
+local CustomLogger = {}
+
+function CustomLogger.Info(str)
+    Logger.Log(eLogColor.WHITE, pluginName, str)
+end
+
+function CustomLogger.Warn(str)
+    Logger.Log(eLogColor.YELLOW, pluginName, str)
+end
+
+function CustomLogger.Error(str)
+    Logger.Log(eLogColor.RED, pluginName, str)
+end
+
+-- ============================================================================
 -- Utilities
 -- ============================================================================
 local function DownloadAndSaveLuaFile(url, filePath)
@@ -94,12 +111,11 @@ function NetworkUtils.SetEntityAsNetworked(entity, timeout)
         NETWORK.NETWORK_REGISTER_ENTITY_AS_NETWORKED(entity)
         Script.Yield(0)
     end
-    return NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity)
+    return NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
 end
 
 function NetworkUtils.ConstantizeNetworkId(entity)
-    NetworkUtils.SetEntityAsNetworked(entity, CONSTANTS.NETWORK_TIMEOUT_SHORT)
-    local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    local netId = NetworkUtils.SetEntityAsNetworked(entity, CONSTANTS.NETWORK_TIMEOUT_SHORT)
     NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, true)
     NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), true)
     return netId
@@ -107,11 +123,12 @@ end
 
 function NetworkUtils.MakeEntityNetworked(entity)
     if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
-        ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, true, true)
+        ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
     end
-    ENTITY.SET_ENTITY_SHOULD_FREEZE_WAITING_ON_COLLISION(entity, false)
-    NetworkUtils.ConstantizeNetworkId(entity)
-    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(NETWORK.OBJ_TO_NET(entity), false)
+    ENTITY.SET_ENTITY_SHOULD_FREEZE_WAITING_ON_COLLISION(entity, true)
+    local netId = NetworkUtils.ConstantizeNetworkId(entity)
+    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false)
+    return netId
 end
 
 -- ============================================================================
@@ -160,34 +177,19 @@ Keybinds.MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal)
 Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal)
 
 -- ============================================================================
--- Custom Logger
--- ============================================================================
-local CustomLogger = {}
-
-function CustomLogger.Info(str)
-    Logger.Log(eLogColor.WHITE, pluginName, str)
-end
-
-function CustomLogger.Warn(str)
-    Logger.Log(eLogColor.YELLOW, pluginName, str)
-end
-
-function CustomLogger.Error(str)
-    Logger.Log(eLogColor.RED, pluginName, str)
-end
-
--- ============================================================================
 -- Configuration Management
 -- ============================================================================
 local Config = {
     enableF9Key = false,
-    throwableMode = false
+    throwableMode = false,
+    groundCollision = false
 }
 
 local function SaveConfig()
     -- Simple key=value format
     local configData = "enableF9Key=" .. tostring(Config.enableF9Key) .. "\n" ..
-                       "throwableMode=" .. tostring(Config.throwableMode) .. "\n"
+                       "throwableMode=" .. tostring(Config.throwableMode) .. "\n" ..
+                       "groundCollision=" .. tostring(Config.groundCollision) .. "\n"
 
     if FileMgr.WriteFileContent(configPath, configData) then
         CustomLogger.Info("Configuration saved")
@@ -218,6 +220,8 @@ local function LoadConfig()
                 Config.enableF9Key = (value == "true")
             elseif key == "throwableMode" then
                 Config.throwableMode = (value == "true")
+            elseif key == "groundCollision" then
+                Config.groundCollision = (value == "true")
             end
         end
     end
@@ -352,16 +356,7 @@ Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 
 function Spooner.TakeControlOfEntity(entity)
-    if not NETWORK.NETWORK_HAS_CONTROL_OF_ENTITY(entity) then
-        NETWORK.NETWORK_REQUEST_CONTROL_OF_ENTITY(entity)
-
-        local start = Time.GetEpocheMs()
-        while not NETWORK.NETWORK_HAS_CONTROL_OF_ENTITY(entity) and (Time.GetEpocheMs() - start) < 1000 do
-            Script.Yield(10)
-        end
-    end
-
-    NetworkUtils.MakeEntityNetworked(entity)
+    return NetworkUtils.MakeEntityNetworked(entity)
 end
 
 function Spooner.IsEntityRestricted(entity)
@@ -458,6 +453,49 @@ function Spooner.UpdateGrabbedEntity()
     end
 
     local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.grabOffsets)
+
+    -- Optional ground collision prevention
+    if Config.groundCollision then
+        local groundZPtr = Memory.Alloc(8)  -- Allocate 8 bytes for float/double
+        Memory.WriteFloat(groundZPtr, 0.0)
+
+        local foundGround = MISC.GET_GROUND_Z_FOR_3D_COORD(newPos.x, newPos.y, newPos.z + 100.0, groundZPtr, false, false)
+
+        if foundGround then
+            local groundZValue = Memory.ReadFloat(groundZPtr)
+
+            -- Get entity dimensions to calculate where the bottom of the entity is
+            local minPtr = Memory.Alloc(24)  -- 3 floats (x, y, z)
+            local maxPtr = Memory.Alloc(24)
+            MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(Spooner.grabbedEntity), minPtr, maxPtr)
+
+            -- Read the minimum Z (bottom of the entity relative to its origin)
+            local min = Memory.ReadV3(minPtr)
+            local max = Memory.ReadV3(maxPtr)
+
+            -- DEBUG: Log the values
+            CustomLogger.Info(string.format("Ground Z: %.3f, Entity Pos Z: %.3f, MinZ: %.3f, MaxZ: %.3f",
+                groundZValue, newPos.z, min.z, max.z))
+
+            -- Calculate where the entity's origin needs to be so its bottom sits on the ground
+            -- minZ is negative (e.g., -0.5 means bottom is 0.5 units below origin)
+            -- So we subtract minZ from ground height to get the proper origin height
+            local targetOriginZ = groundZValue - min.z
+
+            CustomLogger.Info(string.format("Target Origin Z: %.3f (Ground: %.3f - MinZ: %.3f)",
+                targetOriginZ, groundZValue, min.z))
+
+            if newPos.z < targetOriginZ then
+                CustomLogger.Info(string.format("Adjusting Z from %.3f to %.3f", newPos.z, targetOriginZ))
+                newPos.z = targetOriginZ
+            end
+
+            Memory.Free(minPtr)
+            Memory.Free(maxPtr)
+        end
+
+        Memory.Free(groundZPtr)
+    end
 
     ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.grabbedEntity, newPos.x, newPos.y, newPos.z, false, false, false)
     ENTITY.SET_ENTITY_ROTATION(
@@ -885,6 +923,7 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_MakeMissionEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
+            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableGroundCollision"))
 
             ImGui.Separator()
             ImGui.Text("Managed Entities Database")
@@ -975,13 +1014,19 @@ FeatureMgr.AddFeature(
 
             if ENTITY.DOES_ENTITY_EXIST(entity) then
                 Script.QueueJob(function()
-                    Spooner.TakeControlOfEntity(entity)
+                    local netId = Spooner.TakeControlOfEntity(entity)
 
                     local ptr = Memory.AllocInt()
                     Memory.WriteInt(ptr, entity)
 
-                    ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, true, true)
+                    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
+                    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), false)
+                    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
+                    ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
+                    ENTITY.SET_ENTITY_SHOULD_FREEZE_WAITING_ON_COLLISION(entity, false)
                     ENTITY.DELETE_ENTITY(ptr)
+
+                    CustomLogger.Info("Network ID: " .. tostring(netId))
 
                     Memory.Free(ptr)
 
@@ -1024,6 +1069,17 @@ local enableThrowableModeFeature = FeatureMgr.AddFeature(
     end
 )
 
+local enableGroundCollisionFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_EnableGroundCollision"),
+    "Enable Ground Collision",
+    eFeatureType.Toggle,
+    "Prevent entities from going through the ground",
+    function(f)
+        Config.groundCollision = f:IsToggled()
+        SaveConfig()
+    end
+)
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
@@ -1038,6 +1094,11 @@ end
 -- Restore throwable mode setting
 if Config.throwableMode then
     enableThrowableModeFeature:Toggle()
+end
+
+-- Restore ground collision setting
+if Config.groundCollision then
+    enableGroundCollisionFeature:Toggle()
 end
 
 DrawManager.ClickGUIInit()
