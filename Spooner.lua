@@ -2211,8 +2211,14 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
 -- Helper function to update freeze toggle when selecting a new entity
 function Spooner.UpdateFreezeToggleForEntity(entity)
     if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-        -- Use IS_ENTITY_STATIC to check if entity is frozen (static = frozen)
-        local isFrozen = ENTITY.IS_ENTITY_STATIC(entity)
+        -- Check frozen state via memory (offset 0x2E, bit 1)
+        local isFrozen = false
+        local pEntity = GTA.HandleToPointer(entity)
+        if pEntity then
+            local address = pEntity:GetAddress()
+            local frozenByte = Memory.ReadByte(address + 0x2E)
+            isFrozen = (frozenByte & (1 << 1)) ~= 0
+        end
         local isToggled = freezeEntityFeature:IsToggled()
         if isFrozen ~= isToggled and not isRunningFreeze then
             freezeEntityFeature:Toggle(isFrozen)
