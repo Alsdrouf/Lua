@@ -1782,6 +1782,7 @@ function DrawManager.ClickGUIInit()
                             local isSelected = (item.index == Spooner.selectedEntityIndex)
                             if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
                                 Spooner.selectedEntityIndex = item.index
+                                Spooner.UpdateFreezeToggleForEntity(item.entity)
                             end
                         end
                     end
@@ -1798,6 +1799,7 @@ function DrawManager.ClickGUIInit()
                             local isSelected = (item.index == Spooner.selectedEntityIndex)
                             if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
                                 Spooner.selectedEntityIndex = item.index
+                                Spooner.UpdateFreezeToggleForEntity(item.entity)
                             end
                         end
                     end
@@ -1814,6 +1816,7 @@ function DrawManager.ClickGUIInit()
                             local isSelected = (item.index == Spooner.selectedEntityIndex)
                             if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
                                 Spooner.selectedEntityIndex = item.index
+                                Spooner.UpdateFreezeToggleForEntity(item.entity)
                             end
                         end
                     end
@@ -1827,6 +1830,133 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
 
+            ClickGUI.EndCustomChildWindow()
+        end
+
+        -- Manual Position/Rotation Control Section
+        if ClickGUI.BeginCustomChildWindow("Entity Transform") then
+            if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
+                local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
+                if ENTITY.DOES_ENTITY_EXIST(entity) then
+                    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+                    local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
+
+                    -- Freeze toggle to prevent physics interference during rotation
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_FreezeSelectedEntity"))
+                    ImGui.Spacing()
+
+                    ImGui.Text("Position")
+                    ImGui.Separator()
+
+                    -- X Position slider
+                    local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - 50.0, pos.x + 50.0)
+                    if changedX then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, newX, pos.y, pos.z, false, false, false)
+                        end)
+                    end
+
+                    -- Y Position slider
+                    local newY, changedY = ImGui.SliderFloat("Y##pos", pos.y, pos.y - 50.0, pos.y + 50.0)
+                    if changedY then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, newY, pos.z, false, false, false)
+                        end)
+                    end
+
+                    -- Z Position slider
+                    local newZ, changedZ = ImGui.SliderFloat("Z##pos", pos.z, pos.z - 50.0, pos.z + 50.0)
+                    if changedZ then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, pos.y, newZ, false, false, false)
+                        end)
+                    end
+
+                    ImGui.Spacing()
+                    ImGui.Text("Rotation")
+                    ImGui.Separator()
+
+                    -- Pitch (X rotation) slider - clamped to ±89° to avoid gimbal lock flip
+                    local newPitch, changedPitch = ImGui.SliderFloat("Pitch##rot", rot.x, -89.0, 89.0)
+                    if changedPitch then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_ROTATION(entity, newPitch, rot.y, rot.z, 2, true)
+                        end)
+                    end
+
+                    -- Roll (Y rotation) slider - clamped to ±89° to avoid gimbal lock flip
+                    local newRoll, changedRoll = ImGui.SliderFloat("Roll##rot", rot.y, -89.0, 89.0)
+                    if changedRoll then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_ROTATION(entity, rot.x, newRoll, rot.z, 2, true)
+                        end)
+                    end
+
+                    -- Yaw (Z rotation) slider
+                    local newYaw, changedYaw = ImGui.SliderFloat("Yaw##rot", rot.z, -180.0, 180.0)
+                    if changedYaw then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, newYaw, 2, true)
+                        end)
+                    end
+
+                    ImGui.Spacing()
+                    ImGui.Separator()
+
+                    -- Teleport to entity button
+                    if ImGui.Button("Teleport to Entity") then
+                        Script.QueueJob(function()
+                            local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
+                            if Spooner.inSpoonerMode and Spooner.freecam then
+                                CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
+                            else
+                                local playerPed = PLAYER.PLAYER_PED_ID()
+                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
+                            end
+                        end)
+                    end
+
+                    ImGui.SameLine()
+
+                    -- Teleport entity to camera/player button
+                    if ImGui.Button("Teleport Entity Here") then
+                        Script.QueueJob(function()
+                            Spooner.TakeControlOfEntity(entity)
+                            local targetPos
+                            if Spooner.inSpoonerMode and Spooner.freecam then
+                                local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+                                local fwd = CameraUtils.GetBasis(Spooner.freecam)
+                                targetPos = {
+                                    x = camPos.x + fwd.x * 5.0,
+                                    y = camPos.y + fwd.y * 5.0,
+                                    z = camPos.z + fwd.z * 5.0
+                                }
+                            else
+                                local playerPed = PLAYER.PLAYER_PED_ID()
+                                local playerPos = ENTITY.GET_ENTITY_COORDS(playerPed, true)
+                                local playerHeading = ENTITY.GET_ENTITY_HEADING(playerPed)
+                                local rad = math.rad(playerHeading)
+                                targetPos = {
+                                    x = playerPos.x - math.sin(rad) * 5.0,
+                                    y = playerPos.y + math.cos(rad) * 5.0,
+                                    z = playerPos.z
+                                }
+                            end
+                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
+                        end)
+                    end
+                else
+                    ImGui.Text("Selected entity no longer exists")
+                end
+            else
+                ImGui.Text("Select an entity from the database above")
+            end
             ClickGUI.EndCustomChildWindow()
         end
 
@@ -2012,6 +2142,50 @@ FeatureMgr.AddFeature(
         end
     end
 )
+
+local isRunningFreeze = false
+
+local freezeEntityFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_FreezeSelectedEntity"),
+    "Freeze Entity",
+    eFeatureType.Toggle,
+    "Freeze entity position",
+    function(f)
+        isRunningFreeze = true
+        if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
+            local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
+            if ENTITY.DOES_ENTITY_EXIST(entity) then
+                Script.QueueJob(function()
+                    Spooner.TakeControlOfEntity(entity)
+                    local frozen = f:IsToggled()
+                    ENTITY.FREEZE_ENTITY_POSITION(entity, frozen)
+
+                    -- When unfreezing, activate physics so entity responds to gravity
+                    if not frozen then
+                        ENTITY.SET_ENTITY_DYNAMIC(entity, true)
+                        ENTITY.SET_ENTITY_HAS_GRAVITY(entity, true)
+                        -- Apply small downward force to kickstart physics
+                        ENTITY.APPLY_FORCE_TO_ENTITY(entity, 1, 0.0, 0.0, -0.5, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                    end
+
+                    isRunningFreeze = false
+                end)
+            end
+        end
+    end
+)
+
+-- Helper function to update freeze toggle when selecting a new entity
+function Spooner.UpdateFreezeToggleForEntity(entity)
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        -- Use IS_ENTITY_STATIC to check if entity is frozen (static = frozen)
+        local isFrozen = ENTITY.IS_ENTITY_STATIC(entity)
+        local isToggled = freezeEntityFeature:IsToggled()
+        if isFrozen ~= isToggled and not isRunningFreeze then
+            freezeEntityFeature:Toggle(isFrozen)
+        end
+    end
+end
 
 FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_DeleteEntity"),
