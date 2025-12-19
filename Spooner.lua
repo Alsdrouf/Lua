@@ -1,7 +1,7 @@
 local pluginName = "Spooner"
 local menuRootPath = FileMgr.GetMenuRootPath() .. "\\Lua\\" .. pluginName
 local nativesPath = menuRootPath .. "\\Assets\\natives.lua"
-local configPath = menuRootPath .. "\\config.txt"
+local configPath = menuRootPath .. "\\config.xml"
 
 FileMgr.CreateDir(menuRootPath)
 FileMgr.CreateDir(menuRootPath .. "\\Assets")
@@ -96,6 +96,62 @@ function XMLParser.Parse(xmlString)
     end
 
     return result.children or {}
+end
+
+function XMLParser.EscapeAttribute(str)
+    if type(str) ~= "string" then
+        str = tostring(str)
+    end
+    str = str:gsub("&", "&amp;")
+    str = str:gsub("<", "&lt;")
+    str = str:gsub(">", "&gt;")
+    str = str:gsub('"', "&quot;")
+    str = str:gsub("'", "&apos;")
+    return str
+end
+
+function XMLParser.GenerateXML(rootTag, options)
+    local lines = {}
+    table.insert(lines, '<?xml version="1.0" encoding="UTF-8"?>')
+    table.insert(lines, '<' .. rootTag .. '>')
+
+    for key, value in pairs(options) do
+        local escapedValue = XMLParser.EscapeAttribute(value)
+        table.insert(lines, '    <Option name="' .. key .. '" value="' .. escapedValue .. '" />')
+    end
+
+    table.insert(lines, '</' .. rootTag .. '>')
+    return table.concat(lines, '\n')
+end
+
+function XMLParser.ParseConfig(xmlString)
+    local config = {}
+    local parsed = XMLParser.Parse(xmlString)
+
+    for _, node in ipairs(parsed) do
+        if node.tag == "SpoonerConfig" then
+            for _, optionNode in ipairs(node.children or {}) do
+                if optionNode.tag == "Option" then
+                    local name = optionNode.attributes.name
+                    local value = optionNode.attributes.value
+                    if name and value then
+                        -- Convert string values to appropriate types
+                        if value == "true" then
+                            config[name] = true
+                        elseif value == "false" then
+                            config[name] = false
+                        elseif tonumber(value) then
+                            config[name] = tonumber(value)
+                        else
+                            config[name] = value
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return config
 end
 
 -- ============================================================================
@@ -394,16 +450,19 @@ local Config = {
     enableF9Key = false,
     throwableMode = false,
     clipToGround = false,
+    lockMovementWhileMenuIsOpen = false,
 }
 
 local function SaveConfig()
-    -- Simple key=value format
-    local configData = "enableF9Key=" .. tostring(Config.enableF9Key) .. "\n" ..
-                       "throwableMode=" .. tostring(Config.throwableMode) .. "\n" ..
-                       "clipToGround=" .. tostring(Config.clipToGround) .. "\n"
+    local xmlContent = XMLParser.GenerateXML("SpoonerConfig", {
+        enableF9Key = Config.enableF9Key,
+        throwableMode = Config.throwableMode,
+        clipToGround = Config.clipToGround,
+        lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen
+    })
 
-    if FileMgr.WriteFileContent(configPath, configData) then
-        CustomLogger.Info("Configuration saved")
+    if FileMgr.WriteFileContent(configPath, xmlContent) then
+        CustomLogger.Info("Configuration saved to XML")
         return true
     else
         CustomLogger.Error("Failed to save configuration")
@@ -423,21 +482,19 @@ local function LoadConfig()
         return
     end
 
-    -- Parse simple key=value format
-    for line in configData:gmatch("[^\r\n]+") do
-        local key, value = line:match("^(.-)=(.+)$")
-        if key and value then
-            if key == "enableF9Key" then
-                Config.enableF9Key = (value == "true")
-            elseif key == "throwableMode" then
-                Config.throwableMode = (value == "true")
-            elseif key == "clipToGround" then
-                Config.clipToGround = (value == "true")
-            end
-        end
+    local loadedConfig = XMLParser.ParseConfig(configData)
+
+    if loadedConfig.enableF9Key ~= nil then
+        Config.enableF9Key = loadedConfig.enableF9Key
+    end
+    if loadedConfig.throwableMode ~= nil then
+        Config.throwableMode = loadedConfig.throwableMode
+    end
+    if loadedConfig.clipToGround ~= nil then
+        Config.clipToGround = loadedConfig.clipToGround
     end
 
-    CustomLogger.Info("Configuration loaded")
+    CustomLogger.Info("Configuration loaded from XML")
 end
 
 -- ============================================================================
@@ -566,6 +623,7 @@ Spooner.makeMissionEntity = false
 Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 Spooner.clipToGround = false
+Spooner.lockMovementWhileMenuIsOpen = false
 -- Preview spawn system
 Spooner.previewEntity = nil
 Spooner.previewModelHash = nil
@@ -573,6 +631,7 @@ Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
 Spooner.previewRotation = 0.0
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
+Spooner.previewOffset = {x = 0, y = 10.0, z = 0}  -- Offset from camera (like grab system)
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MakeEntityNetworked(entity)
@@ -784,14 +843,16 @@ function Spooner.HandleEntityGrabbing()
 
     local isRightClickPressed = Keybinds.Grab.IsPressed()
 
-    if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
-        if not Spooner.isGrabbing then
-            Spooner.StartGrabbing()
+    if not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen then
+        if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
+            if not Spooner.isGrabbing then
+                Spooner.StartGrabbing()
+            end
+        else
+            Spooner.ReleaseEntity()
         end
-        Spooner.UpdateGrabbedEntity()
-    else
-        Spooner.ReleaseEntity()
     end
+    Spooner.UpdateGrabbedEntity()
 end
 
 function Spooner.UpdateFreecam()
@@ -839,8 +900,10 @@ function Spooner.UpdateFreecam()
     camPos.y = camPos.y + (rightY * (moveRight - moveLeft) * speed)
     camPos.z = camPos.z + ((moveUp - moveDown) * speed)
 
-    CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
-    CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
+    if not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen then
+        CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
+        CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
+    end
 
     STREAMING.SET_FOCUS_POS_AND_VEL(camPos.x, camPos.y, camPos.z, 0.0, 0.0, 0.0)
     HUD.LOCK_MINIMAP_POSITION(camPos.x, camPos.y)
@@ -948,8 +1011,8 @@ function Spawner.LoadModel(modelHash, timeout)
 end
 
 function Spawner.SelectEntity(entityType, modelName, modelHash)
-    -- Clear existing preview if any, but keep the rotation
-    Spawner.ClearPreview(true)
+    -- Clear existing preview if any, but keep the rotation and offset
+    Spawner.ClearPreview(true, true)
 
     Spooner.previewEntityType = entityType
     Spooner.previewModelName = modelName
@@ -958,9 +1021,10 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
     CustomLogger.Info("Selected " .. entityType .. ": " .. modelName .. " - Press Enter to spawn, Backspace to cancel")
 end
 
-function Spawner.SpawnProp(hashString)
+function Spawner.SpawnProp(hashString, propName)
     local hash = tonumber(hashString) or Utils.Joaat(hashString)
-    Spawner.SelectEntity("prop", hashString, hash)
+    local name = propName or hashString
+    Spawner.SelectEntity("prop", name, hash)
 end
 
 function Spawner.SpawnVehicle(modelName)
@@ -973,7 +1037,7 @@ function Spawner.SpawnPed(modelName)
     Spawner.SelectEntity("ped", modelName, hash)
 end
 
-function Spawner.ClearPreview(keepRotation)
+function Spawner.ClearPreview(keepRotation, keepOffset)
     -- Queue the current preview entity for deletion in the game thread
     if Spooner.previewEntity then
         Spooner.pendingPreviewDelete = Spooner.previewEntity
@@ -984,6 +1048,9 @@ function Spawner.ClearPreview(keepRotation)
     Spooner.previewModelName = nil
     if not keepRotation then
         Spooner.previewRotation = 0.0
+    end
+    if not keepOffset then
+        Spooner.previewOffset = {x = 0, y = 10.0, z = 0}
     end
 end
 
@@ -1111,8 +1178,12 @@ function Spawner.UpdatePreview()
         return
     end
 
-    local pos = Spawner.GetCrosshairWorldPosition()
-    if not pos then return end
+    -- Get camera position and basis vectors (like grab system)
+    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+    local fwd, right, up = CameraUtils.GetBasis(Spooner.freecam)
+
+    -- Calculate position using offset (like grabbed entity)
+    local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.previewOffset)
 
     -- Create preview entity if needed
     if not Spooner.previewEntity or not ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
@@ -1120,40 +1191,39 @@ function Spawner.UpdatePreview()
             STREAMING.REQUEST_MODEL(Spooner.previewModelHash)
             return
         end
-        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, pos)
+        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, newPos)
     end
 
     if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        -- Handle rotation with Q/E keys (only when not grabbing an entity)
-        if not Spooner.isGrabbing then
-            local rotSpeed = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or CONSTANTS.ROTATION_SPEED
-            if Keybinds.RotateRight.IsPressed() then
-                Spooner.previewRotation = Spooner.previewRotation - rotSpeed
-            elseif Keybinds.RotateLeft.IsPressed() then
-                Spooner.previewRotation = Spooner.previewRotation + rotSpeed
-            end
+        -- Handle push/pull with scroll (like grab system)
+        local speedMultiplier = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or 1.0
+        local scrollSpeed = CONSTANTS.SCROLL_SPEED * speedMultiplier
+
+        if Keybinds.PushEntity.IsPressed() then
+            Spooner.previewOffset.y = math.max(Spooner.previewOffset.y - scrollSpeed, CONSTANTS.MIN_GRAB_DISTANCE)
+        elseif Keybinds.PullEntity.IsPressed() then
+            Spooner.previewOffset.y = Spooner.previewOffset.y + scrollSpeed
         end
 
-        -- Update position
-        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, pos.x, pos.y, pos.z, false, false, false)
-        ENTITY.SET_ENTITY_HEADING(Spooner.previewEntity, Spooner.previewRotation)
+        -- Handle rotation with Q/E keys
+        local rotSpeed = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or CONSTANTS.ROTATION_SPEED
+        if Keybinds.RotateRight.IsPressed() then
+            Spooner.previewRotation = Spooner.previewRotation - rotSpeed
+        elseif Keybinds.RotateLeft.IsPressed() then
+            Spooner.previewRotation = Spooner.previewRotation + rotSpeed
+        end
 
-        -- Snap to ground if clip to ground is enabled
+        -- Recalculate position after potential offset changes
+        newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.previewOffset)
+
+        -- Apply clip to ground if enabled
         if Spooner.clipToGround then
-            local groundZ = Spooner.GetGroundZAtPosition(pos.x, pos.y, pos.z + 100)
-            if groundZ then
-                -- Get entity model dimensions to place it properly on ground
-                local min = Memory.Alloc(24)
-                local max = Memory.Alloc(24)
-                MISC.GET_MODEL_DIMENSIONS(Spooner.previewModelHash, min, max)
-                local minZ = Memory.ReadFloat(min + 16)
-                Memory.Free(min)
-                Memory.Free(max)
-
-                -- Position entity so its bottom touches the ground
-                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, pos.x, pos.y, groundZ - minZ, false, false, false)
-            end
+            newPos = Spooner.ClipEntityToGround(Spooner.previewEntity, newPos)
         end
+
+        -- Update position and rotation
+        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, newPos.x, newPos.y, newPos.z, false, false, false)
+        ENTITY.SET_ENTITY_HEADING(Spooner.previewEntity, Spooner.previewRotation)
     end
 end
 
@@ -1354,6 +1424,13 @@ function DrawManager.DrawInstructionalButtons()
         )
         buttonIndex = buttonIndex + 1
 
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
+            "Push / Pull Preview"
+        )
+        buttonIndex = buttonIndex + 1
+
         DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
         buttonIndex = buttonIndex + 1
 
@@ -1443,15 +1520,40 @@ function DrawManager.GetEntityName(entity)
     local modelName = GTA.GetModelNameFromHash(modelHash)
 
     if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
+        -- Get the display name (like "Adder" instead of "adder")
+        local displayName = GTA.GetDisplayNameFromHash(modelHash)
         local plate = VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT(entity)
-        return "Vehicle - " .. modelName .. " (" .. plate .. ")"
+        if displayName and displayName ~= "" and displayName ~= "NULL" then
+            return displayName .. " [" .. plate .. "]"
+        end
+        return modelName .. " [" .. plate .. "]"
     elseif ENTITY.IS_ENTITY_A_PED(entity) then
-        return "Ped - " .. modelName
+        -- Try to find ped name from our loaded list
+        for categoryName, peds in pairs(EntityLists.Peds) do
+            for _, ped in ipairs(peds) do
+                if Utils.Joaat(ped.name) == modelHash then
+                    if ped.caption and ped.caption ~= "" then
+                        return ped.caption
+                    end
+                    return ped.name
+                end
+            end
+        end
+        return modelName
     elseif ENTITY.IS_ENTITY_AN_OBJECT(entity) then
-        return "Object - " .. modelName
+        -- Try to find prop name from our loaded list
+        for categoryName, props in pairs(EntityLists.Props) do
+            for _, prop in ipairs(props) do
+                local propHash = tonumber(prop.hash) or Utils.Joaat(prop.hash)
+                if propHash == modelHash then
+                    return prop.name
+                end
+            end
+        end
+        return modelName
     end
 
-    return "Unknown - " .. modelName
+    return modelName
 end
 
 function DrawManager.Draw3DBox(entity)
@@ -1583,37 +1685,83 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
+            ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"))
 
-            ImGui.Separator()
-            ImGui.Text("Managed Entities Database")
+            ClickGUI.EndCustomChildWindow()
+        end
 
-            local previewValue = "None"
-            if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-                local ent = Spooner.managedEntities[Spooner.selectedEntityIndex]
-                previewValue = DrawManager.GetEntityName(ent)
-            elseif #Spooner.managedEntities > 0 then
-                Spooner.selectedEntityIndex = 1
-                previewValue = DrawManager.GetEntityName(Spooner.managedEntities[1])
-            end
+        -- Managed Entities Database Section
+        if ClickGUI.BeginCustomChildWindow("Managed Entities Database") then
+            -- Categorize entities by type
+            local vehicles = {}
+            local peds = {}
+            local props = {}
 
-            if ImGui.BeginCombo("Select Entity", previewValue) then
-                if #Spooner.managedEntities == 0 then
-                    ImGui.Selectable("None", false)
-                else
-                    for i, entity in ipairs(Spooner.managedEntities) do
-                        local label = DrawManager.GetEntityName(entity)
-                        local isSelected = (i == Spooner.selectedEntityIndex)
-                        if ImGui.Selectable(label .. "##" .. i, isSelected) then
-                            Spooner.selectedEntityIndex = i
-                        end
-                        if isSelected then
-                            ImGui.SetItemDefaultFocus()
-                        end
+            for i, entity in ipairs(Spooner.managedEntities) do
+                if ENTITY.DOES_ENTITY_EXIST(entity) then
+                    if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
+                        table.insert(vehicles, {index = i, entity = entity})
+                    elseif ENTITY.IS_ENTITY_A_PED(entity) then
+                        table.insert(peds, {index = i, entity = entity})
+                    else
+                        table.insert(props, {index = i, entity = entity})
                     end
                 end
-                ImGui.EndCombo()
             end
 
+            if ImGui.BeginTabBar("DatabaseTabs", 0) then
+                -- Vehicles Tab
+                if ImGui.BeginTabItem("Vehicles (" .. #vehicles .. ")") then
+                    if #vehicles == 0 then
+                        ImGui.Text("No vehicles in database")
+                    else
+                        for _, item in ipairs(vehicles) do
+                            local label = DrawManager.GetEntityName(item.entity)
+                            local isSelected = (item.index == Spooner.selectedEntityIndex)
+                            if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
+                                Spooner.selectedEntityIndex = item.index
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                -- Peds Tab
+                if ImGui.BeginTabItem("Peds (" .. #peds .. ")") then
+                    if #peds == 0 then
+                        ImGui.Text("No peds in database")
+                    else
+                        for _, item in ipairs(peds) do
+                            local label = DrawManager.GetEntityName(item.entity)
+                            local isSelected = (item.index == Spooner.selectedEntityIndex)
+                            if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
+                                Spooner.selectedEntityIndex = item.index
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                -- Props Tab
+                if ImGui.BeginTabItem("Props (" .. #props .. ")") then
+                    if #props == 0 then
+                        ImGui.Text("No props in database")
+                    else
+                        for _, item in ipairs(props) do
+                            local label = DrawManager.GetEntityName(item.entity)
+                            local isSelected = (item.index == Spooner.selectedEntityIndex)
+                            if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
+                                Spooner.selectedEntityIndex = item.index
+                            end
+                        end
+                    end
+                    ImGui.EndTabItem()
+                end
+
+                ImGui.EndTabBar()
+            end
+
+            ImGui.Separator()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
 
@@ -1658,7 +1806,7 @@ function DrawManager.ClickGUIInit()
                                 for _, prop in ipairs(filteredProps) do
                                     local displayName = prop.name
                                     if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
-                                        Spawner.SpawnProp(prop.hash)
+                                        Spawner.SpawnProp(prop.hash, prop.name)
                                     end
                                 end
                                 ImGui.TreePop()
@@ -1883,6 +2031,18 @@ local enableClipToGroundFeature = FeatureMgr.AddFeature(
     end
 )
 
+local lockMovementWhileMenuIsOpenFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"),
+    "Lock Movement while menu is open",
+    eFeatureType.Toggle,
+    "Lock cam movement and entity grab while menu is open",
+    function (f)
+        Config.lockMovementWhileMenuIsOpen = f:IsToggled()
+        Spooner.lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen
+        SaveConfig()
+    end
+)
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
@@ -1902,6 +2062,11 @@ end
 -- Restore clip to ground setting
 if Config.clipToGround then
     enableClipToGroundFeature:Toggle()
+end
+
+-- Restore lock movement while menu is open setting
+if Config.lockMovementWhileMenuIsOpen then
+    
 end
 
 -- Load entities
