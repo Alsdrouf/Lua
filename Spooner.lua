@@ -31,6 +31,7 @@ local CONSTANTS = {
     PITCH_CLAMP_MIN = -89.0,
     VELOCITY_MULTIPLIER = 30.0,
     CLIP_TO_GROUND_DISTANCE = 1.5, -- Distance from ground to trigger clip
+    POSITION_STEP_DEFAULT = 1.0, -- Default step for position sliders
 }
 
 -- ============================================================================
@@ -481,6 +482,7 @@ local Config = {
     throwableMode = false,
     clipToGround = false,
     lockMovementWhileMenuIsOpen = false,
+    positionStep = CONSTANTS.POSITION_STEP_DEFAULT,
 }
 
 local function SaveConfig()
@@ -488,7 +490,8 @@ local function SaveConfig()
         enableF9Key = Config.enableF9Key,
         throwableMode = Config.throwableMode,
         clipToGround = Config.clipToGround,
-        lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen
+        lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen,
+        positionStep = Config.positionStep
     })
 
     if FileMgr.WriteFileContent(configPath, xmlContent) then
@@ -522,6 +525,9 @@ local function LoadConfig()
     end
     if loadedConfig.clipToGround ~= nil then
         Config.clipToGround = loadedConfig.clipToGround
+    end
+    if loadedConfig.positionStep ~= nil then
+        Config.positionStep = loadedConfig.positionStep
     end
 
     CustomLogger.Info("Configuration loaded from XML")
@@ -1881,8 +1887,15 @@ function DrawManager.ClickGUIInit()
                     ImGui.Text("Position")
                     ImGui.Separator()
 
+                    -- Position step slider
+                    local newStep, changedStep = ImGui.SliderFloat("Step##pos", Config.positionStep, 0.1, 5.0)
+                    if changedStep then
+                        Config.positionStep = newStep
+                        SaveConfig()
+                    end
+
                     -- X Position slider
-                    local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - 50.0, pos.x + 50.0)
+                    local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - Config.positionStep, pos.x + Config.positionStep)
                     if changedX then
                         Script.QueueJob(function()
                             Spooner.TakeControlOfEntity(entity)
@@ -1891,7 +1904,7 @@ function DrawManager.ClickGUIInit()
                     end
 
                     -- Y Position slider
-                    local newY, changedY = ImGui.SliderFloat("Y##pos", pos.y, pos.y - 50.0, pos.y + 50.0)
+                    local newY, changedY = ImGui.SliderFloat("Y##pos", pos.y, pos.y - Config.positionStep, pos.y + Config.positionStep)
                     if changedY then
                         Script.QueueJob(function()
                             Spooner.TakeControlOfEntity(entity)
@@ -1900,7 +1913,7 @@ function DrawManager.ClickGUIInit()
                     end
 
                     -- Z Position slider
-                    local newZ, changedZ = ImGui.SliderFloat("Z##pos", pos.z, pos.z - 50.0, pos.z + 50.0)
+                    local newZ, changedZ = ImGui.SliderFloat("Z##pos", pos.z, pos.z - Config.positionStep, pos.z + Config.positionStep)
                     if changedZ then
                         Script.QueueJob(function()
                             Spooner.TakeControlOfEntity(entity)
@@ -2341,7 +2354,7 @@ end
 
 -- Restore lock movement while menu is open setting
 if Config.lockMovementWhileMenuIsOpen then
-    
+    lockMovementWhileMenuIsOpenFeature:Toggle()
 end
 
 -- Load entities
