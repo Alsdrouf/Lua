@@ -104,7 +104,11 @@ end
 local EntityLists = {
     Props = {},      -- { [categoryName] = { {name, hash}, ... } }
     Vehicles = {},   -- { [categoryName] = { {name}, ... } }
-    Peds = {}        -- { [categoryName] = { {name, caption}, ... } }
+    Peds = {},       -- { [categoryName] = { {name, caption}, ... } }
+    -- Filter states for each tab
+    PropFilter = "",
+    VehicleFilter = "",
+    PedFilter = ""
 }
 
 function EntityLists.LoadPropList(filePath)
@@ -568,6 +572,7 @@ Spooner.previewModelHash = nil
 Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
 Spooner.previewRotation = 0.0
+Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MakeEntityNetworked(entity)
@@ -937,13 +942,12 @@ function Spawner.LoadModel(modelHash, timeout)
 end
 
 function Spawner.SelectEntity(entityType, modelName, modelHash)
-    -- Clear existing preview if any
-    Spawner.ClearPreview()
+    -- Clear existing preview if any, but keep the rotation
+    Spawner.ClearPreview(true)
 
     Spooner.previewEntityType = entityType
     Spooner.previewModelName = modelName
     Spooner.previewModelHash = modelHash
-    Spooner.previewRotation = 0.0
 
     CustomLogger.Info("Selected " .. entityType .. ": " .. modelName .. " - Press Enter to spawn, Backspace to cancel")
 end
@@ -963,18 +967,18 @@ function Spawner.SpawnPed(modelName)
     Spawner.SelectEntity("ped", modelName, hash)
 end
 
-function Spawner.ClearPreview()
-    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        local ptr = Memory.AllocInt()
-        Memory.WriteInt(ptr, Spooner.previewEntity)
-        ENTITY.DELETE_ENTITY(ptr)
-        Memory.Free(ptr)
+function Spawner.ClearPreview(keepRotation)
+    -- Queue the current preview entity for deletion in the game thread
+    if Spooner.previewEntity then
+        Spooner.pendingPreviewDelete = Spooner.previewEntity
     end
     Spooner.previewEntity = nil
     Spooner.previewModelHash = nil
     Spooner.previewEntityType = nil
     Spooner.previewModelName = nil
-    Spooner.previewRotation = 0.0
+    if not keepRotation then
+        Spooner.previewRotation = 0.0
+    end
 end
 
 function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
@@ -1079,6 +1083,17 @@ function Spawner.GetCrosshairWorldPosition()
 end
 
 function Spawner.UpdatePreview()
+    -- Handle pending entity deletion (from UI thread selection)
+    if Spooner.pendingPreviewDelete then
+        if ENTITY.DOES_ENTITY_EXIST(Spooner.pendingPreviewDelete) then
+            local ptr = Memory.AllocInt()
+            Memory.WriteInt(ptr, Spooner.pendingPreviewDelete)
+            ENTITY.DELETE_ENTITY(ptr)
+            Memory.Free(ptr)
+        end
+        Spooner.pendingPreviewDelete = nil
+    end
+
     if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
         if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
             local ptr = Memory.AllocInt()
@@ -1578,13 +1593,43 @@ function DrawManager.ClickGUIInit()
             if ImGui.BeginTabBar("SpawnerTabs", 0) then
                 -- Props Tab
                 if ImGui.BeginTabItem("Props") then
-                    for categoryName, props in pairs(EntityLists.Props) do
-                        if ImGui.CollapsingHeader(categoryName .. "##Props") then
-                            for _, prop in ipairs(props) do
-                                local displayName = prop.name
-                                if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
-                                    Spawner.SpawnProp(prop.hash)
+                    -- Filter input (InputText returns: newValue, changed)
+                    local newPropFilter, propFilterChanged = ImGui.InputText("Prop Filter", EntityLists.PropFilter, 256)
+                    if propFilterChanged and type(newPropFilter) == "string" then
+                        EntityLists.PropFilter = newPropFilter
+                    end
+
+                    local filterLower = (EntityLists.PropFilter or ""):lower()
+
+                    -- Sort categories alphabetically
+                    local sortedCategories = {}
+                    for categoryName, _ in pairs(EntityLists.Props) do
+                        table.insert(sortedCategories, categoryName)
+                    end
+                    table.sort(sortedCategories)
+
+                    for _, categoryName in ipairs(sortedCategories) do
+                        local props = EntityLists.Props[categoryName]
+                        -- Filter items within category
+                        local filteredProps = {}
+                        for _, prop in ipairs(props) do
+                            if filterLower == "" or prop.name:lower():find(filterLower, 1, true) then
+                                table.insert(filteredProps, prop)
+                            end
+                        end
+
+                        -- Only show category if it has matching items or filter is empty
+                        if #filteredProps > 0 then
+                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                            local flags = (filterLower ~= "") and 32 or 0
+                            if ImGui.TreeNodeEx(categoryName .. "##Props", flags) then
+                                for _, prop in ipairs(filteredProps) do
+                                    local displayName = prop.name
+                                    if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
+                                        Spawner.SpawnProp(prop.hash)
+                                    end
                                 end
+                                ImGui.TreePop()
                             end
                         end
                     end
@@ -1593,12 +1638,43 @@ function DrawManager.ClickGUIInit()
 
                 -- Vehicles Tab
                 if ImGui.BeginTabItem("Vehicles") then
-                    for categoryName, vehicles in pairs(EntityLists.Vehicles) do
-                        if ImGui.CollapsingHeader(categoryName .. "##Vehicles") then
-                            for _, vehicle in ipairs(vehicles) do
-                                if ImGui.Selectable(GTA.GetDisplayNameFromHash(Utils.Joaat(vehicle.name)) .. "##veh_" .. vehicle.name) then
-                                    Spawner.SpawnVehicle(vehicle.name)
+                    -- Filter input (InputText returns: newValue, changed)
+                    local newVehFilter, vehFilterChanged = ImGui.InputText("Vehicle Filter", EntityLists.VehicleFilter, 256)
+                    if vehFilterChanged and type(newVehFilter) == "string" then
+                        EntityLists.VehicleFilter = newVehFilter
+                    end
+
+                    local filterLower = (EntityLists.VehicleFilter or ""):lower()
+
+                    -- Sort categories alphabetically
+                    local sortedCategories = {}
+                    for categoryName, _ in pairs(EntityLists.Vehicles) do
+                        table.insert(sortedCategories, categoryName)
+                    end
+                    table.sort(sortedCategories)
+
+                    for _, categoryName in ipairs(sortedCategories) do
+                        local vehicles = EntityLists.Vehicles[categoryName]
+                        -- Filter items within category
+                        local filteredVehicles = {}
+                        for _, vehicle in ipairs(vehicles) do
+                            local displayName = GTA.GetDisplayNameFromHash(Utils.Joaat(vehicle.name))
+                            if filterLower == "" or vehicle.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
+                                table.insert(filteredVehicles, {vehicle = vehicle, displayName = displayName})
+                            end
+                        end
+
+                        -- Only show category if it has matching items
+                        if #filteredVehicles > 0 then
+                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                            local flags = (filterLower ~= "") and 32 or 0
+                            if ImGui.TreeNodeEx(categoryName .. "##Vehicles", flags) then
+                                for _, item in ipairs(filteredVehicles) do
+                                    if ImGui.Selectable(item.displayName .. "##veh_" .. item.vehicle.name) then
+                                        Spawner.SpawnVehicle(item.vehicle.name)
+                                    end
                                 end
+                                ImGui.TreePop()
                             end
                         end
                     end
@@ -1607,13 +1683,43 @@ function DrawManager.ClickGUIInit()
 
                 -- Peds Tab
                 if ImGui.BeginTabItem("Peds") then
-                    for categoryName, peds in pairs(EntityLists.Peds) do
-                        if ImGui.CollapsingHeader(categoryName .. "##Peds") then
-                            for _, ped in ipairs(peds) do
-                                local displayName = ped.caption ~= "" and ped.caption or ped.name
-                                if ImGui.Selectable(displayName .. "##ped_" .. ped.name) then
-                                    Spawner.SpawnPed(ped.name)
+                    -- Filter input (InputText returns: newValue, changed)
+                    local newPedFilter, pedFilterChanged = ImGui.InputText("Ped Filter", EntityLists.PedFilter, 256)
+                    if pedFilterChanged and type(newPedFilter) == "string" then
+                        EntityLists.PedFilter = newPedFilter
+                    end
+
+                    local filterLower = (EntityLists.PedFilter or ""):lower()
+
+                    -- Sort categories alphabetically
+                    local sortedCategories = {}
+                    for categoryName, _ in pairs(EntityLists.Peds) do
+                        table.insert(sortedCategories, categoryName)
+                    end
+                    table.sort(sortedCategories)
+
+                    for _, categoryName in ipairs(sortedCategories) do
+                        local peds = EntityLists.Peds[categoryName]
+                        -- Filter items within category
+                        local filteredPeds = {}
+                        for _, ped in ipairs(peds) do
+                            local displayName = ped.caption ~= "" and ped.caption or ped.name
+                            if filterLower == "" or ped.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
+                                table.insert(filteredPeds, {ped = ped, displayName = displayName})
+                            end
+                        end
+
+                        -- Only show category if it has matching items
+                        if #filteredPeds > 0 then
+                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                            local flags = (filterLower ~= "") and 32 or 0
+                            if ImGui.TreeNodeEx(categoryName .. "##Peds", flags) then
+                                for _, item in ipairs(filteredPeds) do
+                                    if ImGui.Selectable(item.displayName .. "##ped_" .. item.ped.name) then
+                                        Spawner.SpawnPed(item.ped.name)
+                                    end
                                 end
+                                ImGui.TreePop()
                             end
                         end
                     end
