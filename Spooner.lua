@@ -313,15 +313,15 @@ function EntityLists.BuildNameCache()
     for _, props in pairs(EntityLists.Props) do
         for _, prop in ipairs(props) do
             local hash = tonumber(prop.hash) or Utils.Joaat(prop.hash)
-            EntityLists.NameCache[hash] = prop.name
+                EntityLists.NameCache[hash] = prop.name
+            end
         end
-    end
 
     -- Cache ped names by hash
     for _, peds in pairs(EntityLists.Peds) do
         for _, ped in ipairs(peds) do
             local hash = Utils.Joaat(ped.name)
-            local displayName = (ped.caption and ped.caption ~= "") and ped.caption or ped.name
+                        local displayName = (ped.caption and ped.caption ~= "") and ped.caption or ped.name
             EntityLists.NameCache[hash] = displayName
         end
     end
@@ -458,6 +458,10 @@ Keybinds.AddOrRemoveFromList = Keybinds.CreateKeybind(73, Keybinds.IsJustPressed
 Keybinds.MoveFaster = Keybinds.CreateKeybind(21, Keybinds.IsPressed)
 Keybinds.RotateLeft = Keybinds.CreateKeybind(44, Keybinds.IsPressed)
 Keybinds.RotateRight = Keybinds.CreateKeybind(38, Keybinds.IsPressed)
+Keybinds.PitchUp = Keybinds.CreateKeybind(172, Keybinds.IsPressed)    -- Arrow Up
+Keybinds.PitchDown = Keybinds.CreateKeybind(173, Keybinds.IsPressed)  -- Arrow Down
+Keybinds.RollLeft = Keybinds.CreateKeybind(174, Keybinds.IsPressed)   -- Arrow Left
+Keybinds.RollRight = Keybinds.CreateKeybind(175, Keybinds.IsPressed)  -- Arrow Right
 Keybinds.PushEntity = Keybinds.CreateKeybind(14, Keybinds.IsPressed)
 Keybinds.PullEntity = Keybinds.CreateKeybind(15, Keybinds.IsPressed)
 Keybinds.MoveUp = Keybinds.CreateKeybind(22, Keybinds.GetControlNormal)
@@ -795,10 +799,25 @@ function Spooner.UpdateGrabbedEntity()
     end
 
     local rotationSpeed = CONSTANTS.ROTATION_SPEED * speedMultiplier
+    -- Yaw (Z axis) - Q/E keys
     if Keybinds.RotateRight.IsPressed() then
         Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z - rotationSpeed
     elseif Keybinds.RotateLeft.IsPressed() then
         Spooner.grabbedEntityRotation.z = Spooner.grabbedEntityRotation.z + rotationSpeed
+    end
+    -- Pitch (X axis) - Arrow Up/Down
+    if Keybinds.PitchUp.IsPressed() then
+        Spooner.grabbedEntityRotation.x = Spooner.grabbedEntityRotation.x - rotationSpeed
+    elseif Keybinds.PitchDown.IsPressed() then
+        Spooner.grabbedEntityRotation.x = Spooner.grabbedEntityRotation.x + rotationSpeed
+    end
+    -- Clamp pitch to avoid gimbal lock
+    Spooner.grabbedEntityRotation.x = math.max(CONSTANTS.PITCH_CLAMP_MIN, math.min(Spooner.grabbedEntityRotation.x, CONSTANTS.PITCH_CLAMP_MAX))
+    -- Roll (Y axis) - Arrow Left/Right
+    if Keybinds.RollLeft.IsPressed() then
+        Spooner.grabbedEntityRotation.y = Spooner.grabbedEntityRotation.y - rotationSpeed
+    elseif Keybinds.RollRight.IsPressed() then
+        Spooner.grabbedEntityRotation.y = Spooner.grabbedEntityRotation.y + rotationSpeed
     end
 
     local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.grabOffsets)
@@ -1537,7 +1556,21 @@ function DrawManager.DrawInstructionalButtons()
             DrawManager.AddInstructionalButtonMulti(
                 buttonIndex,
                 {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
-                "Rotate Entity"
+                "Yaw"
+            )
+            buttonIndex = buttonIndex + 1
+
+            DrawManager.AddInstructionalButtonMulti(
+                buttonIndex,
+                {Keybinds.PitchUp.string, Keybinds.PitchDown.string},
+                "Pitch"
+            )
+            buttonIndex = buttonIndex + 1
+
+            DrawManager.AddInstructionalButtonMulti(
+                buttonIndex,
+                {Keybinds.RollLeft.string, Keybinds.RollRight.string},
+                "Roll"
             )
             buttonIndex = buttonIndex + 1
 
