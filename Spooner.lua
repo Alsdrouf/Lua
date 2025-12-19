@@ -777,6 +777,11 @@ function Spooner.HandleEntityGrabbing()
         return
     end
 
+    -- Block grabbing while in preview mode
+    if Spooner.previewModelHash then
+        return
+    end
+
     local isRightClickPressed = Keybinds.Grab.IsPressed()
 
     if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
@@ -896,7 +901,8 @@ function Spooner.ManageEntities()
         return
     end
 
-    if Keybinds.AddOrRemoveFromList.IsPressed() then
+    -- Block adding to database while in preview mode
+    if not Spooner.previewModelHash and Keybinds.AddOrRemoveFromList.IsPressed() then
         local entityToAdd = nil
 
         if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
@@ -1266,9 +1272,14 @@ function DrawManager.DrawCrosshair()
         return
     end
 
-    DrawManager.PerformRaycastCheck()
+    -- Skip raycast check and entity targeting visuals while in preview mode
+    if not Spooner.previewModelHash then
+        DrawManager.PerformRaycastCheck()
+    end
 
-    local color = Spooner.isEntityTargeted and Spooner.crosshairColorGreen or Spooner.crosshairColor
+    -- In preview mode, always use white crosshair (no entity targeting)
+    local isTargeting = not Spooner.previewModelHash and Spooner.isEntityTargeted
+    local color = isTargeting and Spooner.crosshairColorGreen or Spooner.crosshairColor
     local size = Spooner.crosshairSize
     local gap = Spooner.crosshairGap
     local aspectRatio = GRAPHICS.GET_SCREEN_ASPECT_RATIO()
@@ -1328,7 +1339,7 @@ function DrawManager.DrawInstructionalButtons()
 
     local buttonIndex = 0
 
-    -- Show spawn preview controls if a model is selected
+    -- In preview mode, only show preview-related keybinds
     if Spooner.previewModelHash then
         DrawManager.AddInstructionalButton(buttonIndex, Keybinds.ConfirmSpawn.string, "Spawn Entity")
         buttonIndex = buttonIndex + 1
@@ -1342,61 +1353,79 @@ function DrawManager.DrawInstructionalButtons()
             "Rotate Preview"
         )
         buttonIndex = buttonIndex + 1
-    end
 
-    local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
-    DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
-    buttonIndex = buttonIndex + 1
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
+        buttonIndex = buttonIndex + 1
 
-    if Spooner.isGrabbing then
         DrawManager.AddInstructionalButtonMulti(
             buttonIndex,
-            {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
-            "Rotate Entity"
+            {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
+            "Up / Down"
         )
         buttonIndex = buttonIndex + 1
 
         DrawManager.AddInstructionalButtonMulti(
             buttonIndex,
-            {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
-            "Push / Pull Entity"
+            {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
+            "Move Camera"
         )
         buttonIndex = buttonIndex + 1
-    end
+    else
+        -- Normal mode keybinds
+        local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
+        buttonIndex = buttonIndex + 1
 
-    local entityToCheck = Spooner.isGrabbing and Spooner.grabbedEntity or
-                          (Spooner.isEntityTargeted and Spooner.targetedEntity or nil)
+        if Spooner.isGrabbing then
+            DrawManager.AddInstructionalButtonMulti(
+                buttonIndex,
+                {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
+                "Rotate Entity"
+            )
+            buttonIndex = buttonIndex + 1
 
-    if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
-        local isManaged = false
-        for _, e in ipairs(Spooner.managedEntities) do
-            if e == entityToCheck then
-                isManaged = true
-                break
-            end
+            DrawManager.AddInstructionalButtonMulti(
+                buttonIndex,
+                {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
+                "Push / Pull Entity"
+            )
+            buttonIndex = buttonIndex + 1
         end
 
-        local listLabel = isManaged and "Remove from List" or "Add to List"
-        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
+        local entityToCheck = Spooner.isGrabbing and Spooner.grabbedEntity or
+                              (Spooner.isEntityTargeted and Spooner.targetedEntity or nil)
+
+        if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
+            local isManaged = false
+            for _, e in ipairs(Spooner.managedEntities) do
+                if e == entityToCheck then
+                    isManaged = true
+                    break
+                end
+            end
+
+            local listLabel = isManaged and "Remove from List" or "Add to List"
+            DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
+            buttonIndex = buttonIndex + 1
+        end
+
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
+            "Up / Down"
+        )
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
+            "Move Camera"
+        )
         buttonIndex = buttonIndex + 1
     end
-
-    DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
-    buttonIndex = buttonIndex + 1
-
-    DrawManager.AddInstructionalButtonMulti(
-        buttonIndex,
-        {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
-        "Up / Down"
-    )
-    buttonIndex = buttonIndex + 1
-
-    DrawManager.AddInstructionalButtonMulti(
-        buttonIndex,
-        {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
-        "Move Camera"
-    )
-    buttonIndex = buttonIndex + 1
 
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "DRAW_INSTRUCTIONAL_BUTTONS")
     GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(-1)
@@ -1505,6 +1534,14 @@ function DrawManager.DrawTargetedEntityBox()
         return
     end
 
+    -- In preview mode, only draw box on preview entity
+    if Spooner.previewModelHash then
+        if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+            DrawManager.Draw3DBox(Spooner.previewEntity)
+        end
+        return
+    end
+
     -- Draw box on targeted entity
     if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
         DrawManager.Draw3DBox(Spooner.targetedEntity)
@@ -1513,11 +1550,6 @@ function DrawManager.DrawTargetedEntityBox()
     -- Draw box on grabbed entity
     if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
         DrawManager.Draw3DBox(Spooner.grabbedEntity)
-    end
-
-    -- Draw box on preview entity
-    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        DrawManager.Draw3DBox(Spooner.previewEntity)
     end
 end
 
