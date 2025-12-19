@@ -2342,6 +2342,10 @@ FeatureMgr.AddFeature(
 
                     Memory.Free(ptr)
 
+                    if ENTITY.DOES_ENTITY_EXIST(entity) then
+                        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
+                    end
+
                     CustomLogger.Info("Deleted entity: " .. tostring(entity))
                 end)
 
