@@ -686,6 +686,7 @@ end
 local Spooner = {}
 Spooner.inSpoonerMode = false
 Spooner.freecam = nil
+Spooner.freecamBlip = nil
 Spooner.camSpeed = CONSTANTS.CAMERA_SPEED
 Spooner.camRotSpeed = CONSTANTS.CAMERA_ROT_SPEED
 Spooner.crosshairColor = {r = 255, g = 255, b = 255, a = 255}
@@ -1010,6 +1011,11 @@ function Spooner.UpdateFreecam()
 
     STREAMING.SET_FOCUS_POS_AND_VEL(camPos.x, camPos.y, camPos.z, 0.0, 0.0, 0.0)
     HUD.LOCK_MINIMAP_POSITION(camPos.x, camPos.y)
+
+    -- Update blip position
+    if Spooner.freecamBlip then
+        HUD.SET_BLIP_COORDS(Spooner.freecamBlip, camPos.x, camPos.y, camPos.z)
+    end
 end
 
 function Spooner.ToggleSpoonerMode(f)
@@ -1029,6 +1035,12 @@ function Spooner.ToggleSpoonerMode(f)
         CAM.RENDER_SCRIPT_CAMS(true, false, 0, true, false, 0)
         CAM.SET_CAM_CONTROLS_MINI_MAP_HEADING(Spooner.freecam, true)
 
+        -- Create blip for camera position
+        Spooner.freecamBlip = HUD.ADD_BLIP_FOR_COORD(camPos.x, camPos.y, camPos.z)
+        HUD.SET_BLIP_SPRITE(Spooner.freecamBlip, 184)  -- Eye/viewing sprite
+        HUD.SET_BLIP_COLOUR(Spooner.freecamBlip, 5)    -- Yellow
+        HUD.SET_BLIP_SCALE(Spooner.freecamBlip, 0.8)
+
         CustomLogger.Info("Freecam enabled")
     else
         if Spooner.freecam then
@@ -1039,6 +1051,16 @@ function Spooner.ToggleSpoonerMode(f)
             CAM.SET_CAM_ACTIVE(Spooner.freecam, false)
             CAM.DESTROY_CAM(Spooner.freecam, false)
             Spooner.freecam = nil
+
+            -- Remove camera blip
+            if Spooner.freecamBlip then
+                local ptr = Memory.AllocInt()
+                Memory.WriteInt(ptr, Spooner.freecamBlip)
+                HUD.REMOVE_BLIP(ptr)
+                Memory.Free(ptr)
+                Spooner.freecamBlip = nil
+            end
+
             CustomLogger.Info("Freecam disabled")
         end
     end
