@@ -945,12 +945,30 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
     Spooner.previewModelHash = modelHash
     Spooner.previewRotation = 0.0
 
-    CustomLogger.Info("Selected " .. entityType .. ": " .. modelName)
+    CustomLogger.Info("Selected " .. entityType .. ": " .. modelName .. " - Press Enter to spawn, Backspace to cancel")
+end
+
+function Spawner.SpawnProp(hashString)
+    local hash = tonumber(hashString) or Utils.Joaat(hashString)
+    Spawner.SelectEntity("prop", hashString, hash)
+end
+
+function Spawner.SpawnVehicle(modelName)
+    local hash = Utils.Joaat(modelName)
+    Spawner.SelectEntity("vehicle", modelName, hash)
+end
+
+function Spawner.SpawnPed(modelName)
+    local hash = Utils.Joaat(modelName)
+    Spawner.SelectEntity("ped", modelName, hash)
 end
 
 function Spawner.ClearPreview()
     if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+        local ptr = Memory.AllocInt()
+        Memory.WriteInt(ptr, Spooner.previewEntity)
+        ENTITY.DELETE_ENTITY(ptr)
+        Memory.Free(ptr)
     end
     Spooner.previewEntity = nil
     Spooner.previewModelHash = nil
@@ -989,7 +1007,7 @@ end
 
 function Spawner.GetCrosshairWorldPosition()
     if not Spooner.freecam then
-        return nil
+        return nil, false
     end
 
     local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
@@ -1002,11 +1020,14 @@ function Spawner.GetCrosshairWorldPosition()
     local fwdY = math.cos(radZ) * math.cos(radX)
     local fwdZ = math.sin(radX)
 
-    local distance = 10.0
-    local endPos = {
-        x = camPos.x + fwdX * distance,
-        y = camPos.y + fwdY * distance,
-        z = camPos.z + fwdZ * distance
+    local defaultSpawnDistance = 10.0
+    local maxRaycastDistance = 100.0
+
+    -- Default position: in front of camera at fixed distance
+    local defaultPos = {
+        x = camPos.x + fwdX * defaultSpawnDistance,
+        y = camPos.y + fwdY * defaultSpawnDistance,
+        z = camPos.z + fwdZ * defaultSpawnDistance
     }
 
     -- Raycast to find ground/surface
@@ -1017,9 +1038,9 @@ function Spawner.GetCrosshairWorldPosition()
 
     local rayHandle = SHAPETEST.START_EXPENSIVE_SYNCHRONOUS_SHAPE_TEST_LOS_PROBE(
         camPos.x, camPos.y, camPos.z,
-        camPos.x + fwdX * 100.0,
-        camPos.y + fwdY * 100.0,
-        camPos.z + fwdZ * 100.0,
+        camPos.x + fwdX * maxRaycastDistance,
+        camPos.y + fwdY * maxRaycastDistance,
+        camPos.z + fwdZ * maxRaycastDistance,
         -1,
         Spooner.previewEntity or 0,
         7
@@ -1028,14 +1049,25 @@ function Spawner.GetCrosshairWorldPosition()
     local result = SHAPETEST.GET_SHAPE_TEST_RESULT(rayHandle, hit, endCoords, surfaceNormal, entityHit)
 
     local hitResult = Memory.ReadInt(hit)
-    local finalPos = endPos
+    local finalPos = defaultPos
+    local didHitGround = false
 
     if hitResult == 1 then
-        finalPos = {
-            x = Memory.ReadFloat(endCoords),
-            y = Memory.ReadFloat(endCoords + 8),
-            z = Memory.ReadFloat(endCoords + 16)
-        }
+        local hitX = Memory.ReadFloat(endCoords)
+        local hitY = Memory.ReadFloat(endCoords + 8)
+        local hitZ = Memory.ReadFloat(endCoords + 16)
+
+        -- Calculate distance to hit point
+        local dx = hitX - camPos.x
+        local dy = hitY - camPos.y
+        local dz = hitZ - camPos.z
+        local hitDistance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+        -- If hit is within reasonable distance, use it; otherwise spawn in front
+        if hitDistance < maxRaycastDistance then
+            finalPos = { x = hitX, y = hitY, z = hitZ }
+            didHitGround = true
+        end
     end
 
     Memory.Free(hit)
@@ -1043,13 +1075,16 @@ function Spawner.GetCrosshairWorldPosition()
     Memory.Free(surfaceNormal)
     Memory.Free(entityHit)
 
-    return finalPos
+    return finalPos, didHitGround
 end
 
 function Spawner.UpdatePreview()
     if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
         if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-            ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+            local ptr = Memory.AllocInt()
+            Memory.WriteInt(ptr, Spooner.previewEntity)
+            ENTITY.DELETE_ENTITY(ptr)
+            Memory.Free(ptr)
             Spooner.previewEntity = nil
         end
         return
@@ -1068,20 +1103,35 @@ function Spawner.UpdatePreview()
     end
 
     if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        -- Handle rotation with Q/E keys
-        if Keybinds.RotateRight.IsPressed() then
-            Spooner.previewRotation = Spooner.previewRotation - 1.0
-        elseif Keybinds.RotateLeft.IsPressed() then
-            Spooner.previewRotation = Spooner.previewRotation + 1.0
+        -- Handle rotation with Q/E keys (only when not grabbing an entity)
+        if not Spooner.isGrabbing then
+            local rotSpeed = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or CONSTANTS.ROTATION_SPEED
+            if Keybinds.RotateRight.IsPressed() then
+                Spooner.previewRotation = Spooner.previewRotation - rotSpeed
+            elseif Keybinds.RotateLeft.IsPressed() then
+                Spooner.previewRotation = Spooner.previewRotation + rotSpeed
+            end
         end
 
         -- Update position
         ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, pos.x, pos.y, pos.z, false, false, false)
         ENTITY.SET_ENTITY_HEADING(Spooner.previewEntity, Spooner.previewRotation)
 
-        -- Place on ground
+        -- Snap to ground if clip to ground is enabled
         if Spooner.clipToGround then
-            ENTITY.PLACE_ENTITY_ON_GROUND_PROPERLY(Spooner.previewEntity)
+            local groundZ = Spooner.GetGroundZAtPosition(pos.x, pos.y, pos.z + 100)
+            if groundZ then
+                -- Get entity model dimensions to place it properly on ground
+                local min = Memory.Alloc(24)
+                local max = Memory.Alloc(24)
+                MISC.GET_MODEL_DIMENSIONS(Spooner.previewModelHash, min, max)
+                local minZ = Memory.ReadFloat(min + 16)
+                Memory.Free(min)
+                Memory.Free(max)
+
+                -- Position entity so its bottom touches the ground
+                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, pos.x, pos.y, groundZ - minZ, false, false, false)
+            end
         end
     end
 end
@@ -1094,8 +1144,11 @@ function Spawner.ConfirmSpawn()
     local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
     local heading = ENTITY.GET_ENTITY_HEADING(Spooner.previewEntity)
 
-    -- Delete preview
-    ENTITY.DELETE_ENTITY(Spooner.previewEntity)
+    -- Delete preview using pointer
+    local ptr = Memory.AllocInt()
+    Memory.WriteInt(ptr, Spooner.previewEntity)
+    ENTITY.DELETE_ENTITY(ptr)
+    Memory.Free(ptr)
     Spooner.previewEntity = nil
 
     -- Create actual entity
@@ -1114,9 +1167,6 @@ function Spawner.ConfirmSpawn()
 
         if entity and entity ~= 0 then
             ENTITY.SET_ENTITY_HEADING(entity, heading)
-            if Spooner.clipToGround then
-                ENTITY.PLACE_ENTITY_ON_GROUND_PROPERLY(entity)
-            end
             if Spooner.previewEntityType == "vehicle" then
                 VEHICLE.SET_VEHICLE_ON_GROUND_PROPERLY(entity, 0)
             end
@@ -1263,6 +1313,22 @@ function DrawManager.DrawInstructionalButtons()
 
     local buttonIndex = 0
 
+    -- Show spawn preview controls if a model is selected
+    if Spooner.previewModelHash then
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.ConfirmSpawn.string, "Spawn Entity")
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.CancelSpawn.string, "Cancel")
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
+            "Rotate Preview"
+        )
+        buttonIndex = buttonIndex + 1
+    end
+
     local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
     DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
     buttonIndex = buttonIndex + 1
@@ -1344,7 +1410,7 @@ function DrawManager.GetEntityName(entity)
     return "Unknown - " .. modelName
 end
 
-function DrawManager.Draw2DBox(entity)
+function DrawManager.Draw3DBox(entity)
     if not ENTITY.DOES_ENTITY_EXIST(entity) then
         return
     end
@@ -1419,22 +1485,6 @@ function DrawManager.Draw2DBox(entity)
                        worldCorners[8].x, worldCorners[8].y, worldCorners[8].z, 0, 255, 0, 255)
 end
 
-function DrawManager.Draw3DBox(entity, r, g, b, a)
-    if not ENTITY.DOES_ENTITY_EXIST(entity) then
-        return
-    end
-
-    -- Draw a simple marker at entity center
-    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
-
-    -- Draw a vertical line to show entity location
-    GRAPHICS.DRAW_LINE(pos.x, pos.y, pos.z - 1.0, pos.x, pos.y, pos.z + 2.0, r, g, b, a)
-
-    -- Draw horizontal cross
-    GRAPHICS.DRAW_LINE(pos.x - 0.5, pos.y, pos.z, pos.x + 0.5, pos.y, pos.z, r, g, b, a)
-    GRAPHICS.DRAW_LINE(pos.x, pos.y - 0.5, pos.z, pos.x, pos.y + 0.5, pos.z, r, g, b, a)
-end
-
 function DrawManager.DrawTargetedEntityBox()
     if not Spooner.inSpoonerMode then
         return
@@ -1442,12 +1492,17 @@ function DrawManager.DrawTargetedEntityBox()
 
     -- Draw box on targeted entity
     if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
-        DrawManager.Draw2DBox(Spooner.targetedEntity)
+        DrawManager.Draw3DBox(Spooner.targetedEntity)
     end
 
     -- Draw box on grabbed entity
     if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
-        DrawManager.Draw2DBox(Spooner.grabbedEntity)
+        DrawManager.Draw3DBox(Spooner.grabbedEntity)
+    end
+
+    -- Draw box on preview entity
+    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
+        DrawManager.Draw3DBox(Spooner.previewEntity)
     end
 end
 
@@ -1721,7 +1776,8 @@ Script.RegisterLooped(function()
     DrawManager.DrawCrosshair()
     DrawManager.DrawInstructionalButtons()
     DrawManager.DrawSelectedEntityMarker()
-    DrawManager.DrawTargetedEntityBox()
+    Spawner.UpdatePreview()
+    Spawner.HandleInput()
 end)
 
 Script.RegisterLooped(function()
@@ -1729,6 +1785,7 @@ Script.RegisterLooped(function()
         Script.QueueJob(function()
             Spooner.ManageEntities()
             Spooner.HandleEntityGrabbing()
+            DrawManager.DrawTargetedEntityBox()
         end)
     end
 end)
