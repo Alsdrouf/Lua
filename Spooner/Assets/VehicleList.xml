@@ -1,0 +1,970 @@
+﻿<?xml version="1.0" encoding="ISO-8859-1"?>
+<VehicleList>
+	<Category name="Boat">
+		<Vehicle name="avisa" caption="Avisa" />
+		<Vehicle name="dinghy3" caption="Dinghy" />
+		<Vehicle name="dinghy4" caption="Dinghy" />
+		<Vehicle name="Dinghy" caption="Dinghy" />
+		<Vehicle name="dinghy2" caption="Dinghy" />
+		<Vehicle name="jetmax" caption="Jetmax" />
+		<Vehicle name="kosatka" caption="Kosatka" />
+		<Vehicle name="submersible2" caption="Kraken" />
+		<Vehicle name="patrolboat" caption="Kurtz 31 Patrol Boat" />
+		<Vehicle name="longfin" caption="Longfin" />
+		<Vehicle name="marquis" caption="Marquis" />
+		<Vehicle name="Predator" caption="Police Predator" />
+		<Vehicle name="seashark3" caption="Seashark" />
+		<Vehicle name="seashark2" caption="Seashark" />
+		<Vehicle name="seashark" caption="Seashark" />
+		<Vehicle name="speeder2" caption="Speeder" />
+		<Vehicle name="speeder" caption="Speeder" />
+		<Vehicle name="squalo" caption="Squalo" />
+		<Vehicle name="submersible" caption="Submersible" />
+		<Vehicle name="Suntrap" caption="Suntrap" />
+		<Vehicle name="toro2" caption="Toro" />
+		<Vehicle name="toro" caption="Toro" />
+		<Vehicle name="tropic" caption="Tropic" />
+		<Vehicle name="tropic2" caption="Tropic" />
+		<Vehicle name="tug" caption="Tug" />
+		<Vehicle name="dinghy5" caption="Weaponized Dinghy" />
+	</Category>
+	<Category name="Commercial">
+		<Vehicle name="cerberus" caption="Apocalypse Cerberus" />
+		<Vehicle name="Benson" caption="Benson" />
+		<Vehicle name="benson2" caption="Benson (Cluckin' Bell)" />
+		<Vehicle name="Biff" caption="Biff" />
+		<Vehicle name="stockade4" caption="Bobcat Security Stockade" />
+		<Vehicle name="cerberus2" caption="Future Shock Cerberus" />
+		<Vehicle name="Hauler" caption="Hauler" />
+		<Vehicle name="Hauler2" caption="Hauler Custom" />
+		<Vehicle name="Mule3" caption="Mule" />
+		<Vehicle name="mule5" caption="Mule" />
+		<Vehicle name="Mule" caption="Mule" />
+		<Vehicle name="Mule2" caption="Mule" />
+		<Vehicle name="mule4" caption="Mule Custom" />
+		<Vehicle name="cerberus3" caption="Nightmare Cerberus" />
+		<Vehicle name="Packer" caption="Packer" />
+		<Vehicle name="Phantom4" caption="Phantom" />
+		<Vehicle name="Phantom" caption="Phantom" />
+		<Vehicle name="phantom3" caption="Phantom Custom" />
+		<Vehicle name="phantom2" caption="Phantom Wedge" />
+		<Vehicle name="Pounder" caption="Pounder" />
+		<Vehicle name="pounder2" caption="Pounder Custom" />
+		<Vehicle name="stockade3" caption="Stockade" />
+		<Vehicle name="stockade" caption="Stockade" />
+		<Vehicle name="terbyte" caption="Terrorbyte" />
+	</Category>
+	<Category name="Compact">
+		<Vehicle name="issi4" caption="Apocalypse Issi" />
+		<Vehicle name="asbo" caption="Asbo" />
+		<Vehicle name="blista" caption="Blista" />
+		<Vehicle name="kanjo" caption="Blista Kanjo" />
+		<Vehicle name="brioso2" caption="Brioso 300" />
+		<Vehicle name="brioso3" caption="Brioso 300 Widebody" />
+		<Vehicle name="brioso" caption="Brioso R/A" />
+		<Vehicle name="club" caption="Club" />
+		<Vehicle name="dilettante" caption="Dilettante" />
+		<Vehicle name="dilettante2" caption="Dilettante" />
+		<Vehicle name="issi5" caption="Future Shock Issi" />
+		<Vehicle name="issi2" caption="Issi" />
+		<Vehicle name="issi3" caption="Issi Classic" />
+		<Vehicle name="issi6" caption="Nightmare Issi" />
+		<Vehicle name="panto" caption="Panto" />
+		<Vehicle name="prairie" caption="Prairie" />
+		<Vehicle name="rhapsody" caption="Rhapsody" />
+		<Vehicle name="weevil" caption="Weevil" />
+	</Category>
+	<Category name="Coupe">
+		<Vehicle name="cogcabrio" caption="Cognoscenti Cabrio" />
+		<Vehicle name="eurosX32" caption="Euros X32" />
+		<Vehicle name="exemplar" caption="Exemplar" />
+		<Vehicle name="f620" caption="F620" />
+		<Vehicle name="felon" caption="Felon" />
+		<Vehicle name="felon2" caption="Felon GT" />
+		<Vehicle name="driftfr36" caption="FR36" />
+		<Vehicle name="fr36" caption="FR36" />
+		<Vehicle name="jackal" caption="Jackal" />
+		<Vehicle name="kanjosj" caption="Kanjo SJ" />
+		<Vehicle name="oracle2" caption="Oracle" />
+		<Vehicle name="oracle" caption="Oracle XS" />
+		<Vehicle name="postlude" caption="Postlude" />
+		<Vehicle name="previon" caption="Previon" />
+		<Vehicle name="sentinel2" caption="Sentinel" />
+		<Vehicle name="sentinel" caption="Sentinel XS" />
+		<Vehicle name="driftsentinel2" caption="Sentinel XS" />
+		<Vehicle name="windsor" caption="Windsor" />
+		<Vehicle name="windsor2" caption="Windsor Drop" />
+		<Vehicle name="zion" caption="Zion" />
+		<Vehicle name="zion2" caption="Zion Cabrio" />
+	</Category>
+	<Category name="Cycle">
+		<Vehicle name="BMX" caption="BMX" />
+		<Vehicle name="cruiser" caption="Cruiser" />
+		<Vehicle name="tribike2" caption="Endurex Race Bike" />
+		<Vehicle name="fixter" caption="Fixter" />
+		<Vehicle name="inductor" caption="Inductor" />
+		<Vehicle name="inductor2" caption="Junk Energy Inductor" />
+		<Vehicle name="scorcher" caption="Scorcher" />
+		<Vehicle name="tribike3" caption="Tri-Cycles Race Bike" />
+		<Vehicle name="tribike" caption="Whippet Race Bike" />
+	</Category>
+	<Category name="Emergency">
+		<Vehicle name="AMBULANCE" caption="Ambulance" />
+		<Vehicle name="polbuffalo" caption="Buffalo Cruiser" />
+		<Vehicle name="polbuffalo6" caption="Buffalo STX Pursuit" />
+		<Vehicle name="policet3" caption="Burrito (Bail Enforcement)" />
+		<Vehicle name="polcaracara" caption="Caracara Pursuit" />
+		<Vehicle name="polcoquette4" caption="Coquette D10 Pursuit" />
+		<Vehicle name="poldominator10" caption="Dominator FX Interceptor" />
+		<Vehicle name="poldorado" caption="Dorado Cruiser" />
+		<Vehicle name="FBI" caption="FIB" />
+		<Vehicle name="FBI2" caption="FIB" />
+		<Vehicle name="firetruk" caption="Fire Truck" />
+		<Vehicle name="polgauntlet" caption="Gauntlet Interceptor" />
+		<Vehicle name="polgreenwood" caption="Greenwood Cruiser" />
+		<Vehicle name="polimpaler6" caption="Impaler LX Cruiser" />
+		<Vehicle name="polimpaler5" caption="Impaler SZ Cruiser" />
+		<Vehicle name="lguard" caption="Lifeguard" />
+		<Vehicle name="polfaction2" caption="Outreach Faction" />
+		<Vehicle name="pRanger" caption="Park Ranger" />
+		<Vehicle name="policeb" caption="Police Bike" />
+		<Vehicle name="policeb2" caption="Police Bike" />
+		<Vehicle name="police3" caption="Police Cruiser" />
+		<Vehicle name="police" caption="Police Cruiser" />
+		<Vehicle name="police2" caption="Police Cruiser" />
+		<Vehicle name="pbus" caption="Police Prison Bus" />
+		<Vehicle name="policeold1" caption="Police Rancher" />
+		<Vehicle name="RIOT" caption="Police Riot" />
+		<Vehicle name="policeold2" caption="Police Roadcruiser" />
+		<Vehicle name="policet" caption="Police Transporter" />
+		<Vehicle name="riot2" caption="RCV" />
+		<Vehicle name="SHERIFF" caption="Sheriff Cruiser" />
+		<Vehicle name="sheriff2" caption="Sheriff SUV" />
+		<Vehicle name="police5" caption="Stanier LE Cruiser" />
+		<Vehicle name="polterminus" caption="Terminus Patrol" />
+		<Vehicle name="police4" caption="Unmarked Cruiser" />
+	</Category>
+	<Category name="Helicopter">
+		<Vehicle name="akula" caption="Akula" />
+		<Vehicle name="annihilator" caption="Annihilator" />
+		<Vehicle name="annihilator2" caption="Annihilator Stealth" />
+		<Vehicle name="Buzzard2" caption="Buzzard" />
+		<Vehicle name="buzzard" caption="Buzzard Attack Chopper" />
+		<Vehicle name="Cargobob3" caption="Cargobob" />
+		<Vehicle name="Cargobob4" caption="Cargobob" />
+		<Vehicle name="Cargobob" caption="Cargobob" />
+		<Vehicle name="cargobob2" caption="Cargobob" />
+		<Vehicle name="conada" caption="Conada" />
+		<Vehicle name="cargobob5" caption="DH-7 Iron Mule" />
+		<Vehicle name="hunter" caption="FH-1 Hunter" />
+		<Vehicle name="frogger2" caption="Frogger" />
+		<Vehicle name="Frogger" caption="Frogger" />
+		<Vehicle name="havok" caption="Havok" />
+		<Vehicle name="maverick2" caption="Higgins Helitours Maverick" />
+		<Vehicle name="maverick" caption="Maverick" />
+		<Vehicle name="polmav" caption="Police Maverick" />
+		<Vehicle name="savage" caption="Savage" />
+		<Vehicle name="seasparrow" caption="Sea Sparrow" />
+		<Vehicle name="skylift" caption="Skylift" />
+		<Vehicle name="seasparrow3" caption="Sparrow" />
+		<Vehicle name="seasparrow2" caption="Sparrow" />
+		<Vehicle name="supervolito" caption="SuperVolito" />
+		<Vehicle name="supervolito2" caption="SuperVolito Carbon" />
+		<Vehicle name="swift" caption="Swift" />
+		<Vehicle name="swift2" caption="Swift Deluxe" />
+		<Vehicle name="valkyrie" caption="Valkyrie" />
+		<Vehicle name="valkyrie2" caption="Valkyrie MOD.0" />
+		<Vehicle name="volatus" caption="Volatus" />
+		<Vehicle name="conada2" caption="Weaponized Conada" />
+	</Category>
+	<Category name="Industrial">
+		<Vehicle name="flatbed2" caption="Custom Flatbed" />
+		<Vehicle name="cutter" caption="Cutter" />
+		<Vehicle name="handler" caption="Dock Handler" />
+		<Vehicle name="bulldozer" caption="Dozer" />
+		<Vehicle name="dump" caption="Dump" />
+		<Vehicle name="FLATBED" caption="Flatbed" />
+		<Vehicle name="guardian" caption="Guardian" />
+		<Vehicle name="Mixer2" caption="Mixer" />
+		<Vehicle name="Mixer" caption="Mixer" />
+		<Vehicle name="Rubble" caption="Rubble" />
+		<Vehicle name="TipTruck2" caption="Tipper" />
+		<Vehicle name="TipTruck" caption="Tipper" />
+	</Category>
+	<Category name="Military">
+		<Vehicle name="trailersmall2" caption="Anti-Aircraft Trailer" />
+		<Vehicle name="apc" caption="APC" />
+		<Vehicle name="scarab" caption="Apocalypse Scarab" />
+		<Vehicle name="BARRACKS" caption="Barracks" />
+		<Vehicle name="BARRACKS3" caption="Barracks" />
+		<Vehicle name="BARRACKS2" caption="Barracks Semi" />
+		<Vehicle name="barrage" caption="Barrage" />
+		<Vehicle name="chernobog" caption="Chernobog" />
+		<Vehicle name="CRUSADER" caption="Crusader" />
+		<Vehicle name="scarab2" caption="Future Shock Scarab" />
+		<Vehicle name="halftrack" caption="Half-track" />
+		<Vehicle name="minitank" caption="Invade and Persuade Tank" />
+		<Vehicle name="scarab3" caption="Nightmare Scarab" />
+		<Vehicle name="RHINO" caption="Rhino Tank" />
+		<Vehicle name="thruster" caption="Thruster" />
+		<Vehicle name="khanjali" caption="TM-02 Khanjali" />
+		<Vehicle name="vetir" caption="Vetir" />
+	</Category>
+	<Category name="Motorcycle">
+		<Vehicle name="akuma" caption="Akuma" />
+		<Vehicle name="deathbike" caption="Apocalypse Deathbike" />
+		<Vehicle name="avarus" caption="Avarus" />
+		<Vehicle name="bagger" caption="Bagger" />
+		<Vehicle name="bati" caption="Bati 801" />
+		<Vehicle name="bati2" caption="Bati 801RR" />
+		<Vehicle name="bf400" caption="BF400" />
+		<Vehicle name="carbonrs" caption="Carbon RS" />
+		<Vehicle name="chimera" caption="Chimera" />
+		<Vehicle name="cliffhanger" caption="Cliffhanger" />
+		<Vehicle name="daemon" caption="Daemon" />
+		<Vehicle name="daemon2" caption="Daemon Custom" />
+		<Vehicle name="defiler" caption="Defiler" />
+		<Vehicle name="diablous" caption="Diabolus" />
+		<Vehicle name="diablous2" caption="Diabolus Custom" />
+		<Vehicle name="double" caption="Double-T" />
+		<Vehicle name="enduro" caption="Enduro" />
+		<Vehicle name="esskey" caption="Esskey" />
+		<Vehicle name="faggio2" caption="Faggio" />
+		<Vehicle name="faggio3" caption="Faggio Mod" />
+		<Vehicle name="faggio" caption="Faggio Sport" />
+		<Vehicle name="fcr" caption="FCR 1000" />
+		<Vehicle name="fcr2" caption="FCR 1000 Custom" />
+		<Vehicle name="deathbike2" caption="Future Shock Deathbike" />
+		<Vehicle name="gargoyle" caption="Gargoyle" />
+		<Vehicle name="hakuchou" caption="Hakuchou" />
+		<Vehicle name="hakuchou2" caption="Hakuchou Drag" />
+		<Vehicle name="hexer" caption="Hexer" />
+		<Vehicle name="innovation" caption="Innovation" />
+		<Vehicle name="lectro" caption="Lectro" />
+		<Vehicle name="manchez" caption="Manchez" />
+		<Vehicle name="manchez2" caption="Manchez Scout" />
+		<Vehicle name="manchez3" caption="Manchez Scout C" />
+		<Vehicle name="nemesis" caption="Nemesis" />
+		<Vehicle name="nightblade" caption="Nightblade" />
+		<Vehicle name="deathbike3" caption="Nightmare Deathbike" />
+		<Vehicle name="oppressor" caption="Oppressor" />
+		<Vehicle name="oppressor2" caption="Oppressor Mk II" />
+		<Vehicle name="pcj" caption="PCJ 600" />
+		<Vehicle name="pizzaboy" caption="Pizza Boy" />
+		<Vehicle name="powersurge" caption="Powersurge" />
+		<Vehicle name="rrocket" caption="Rampant Rocket" />
+		<Vehicle name="ratbike" caption="Rat Bike" />
+		<Vehicle name="reever" caption="Reever" />
+		<Vehicle name="ruffian" caption="Ruffian" />
+		<Vehicle name="sanchez2" caption="Sanchez" />
+		<Vehicle name="Sanchez" caption="Sanchez (livery)" />
+		<Vehicle name="sanctus" caption="Sanctus" />
+		<Vehicle name="shinobi" caption="Shinobi" />
+		<Vehicle name="shotaro" caption="Shotaro" />
+		<Vehicle name="sovereign" caption="Sovereign" />
+		<Vehicle name="Stryder" caption="Stryder" />
+		<Vehicle name="thrust" caption="Thrust" />
+		<Vehicle name="Vader" caption="Vader" />
+		<Vehicle name="vindicator" caption="Vindicator" />
+		<Vehicle name="vortex" caption="Vortex" />
+		<Vehicle name="wolfsbane" caption="Wolfsbane" />
+		<Vehicle name="zombiea" caption="Zombie Bobber" />
+		<Vehicle name="zombieb" caption="Zombie Chopper" />
+	</Category>
+	<Category name="Muscle">
+		<Vehicle name="dominator4" caption="Apocalypse Dominator" />
+		<Vehicle name="impaler2" caption="Apocalypse Impaler" />
+		<Vehicle name="imperator" caption="Apocalypse Imperator" />
+		<Vehicle name="slamvan4" caption="Apocalypse Slamvan" />
+		<Vehicle name="arbitergt" caption="Arbiter GT" />
+		<Vehicle name="dukes3" caption="Beater Dukes" />
+		<Vehicle name="blade" caption="Blade" />
+		<Vehicle name="brigham" caption="Brigham" />
+		<Vehicle name="broadway" caption="Broadway" />
+		<Vehicle name="buccaneer" caption="Buccaneer" />
+		<Vehicle name="buccaneer2" caption="Buccaneer Custom" />
+		<Vehicle name="buffalo5" caption="Buffalo EVX" />
+		<Vehicle name="buffalo4" caption="Buffalo STX" />
+		<Vehicle name="stalion2" caption="Burger Shot Stallion" />
+		<Vehicle name="chino" caption="Chino" />
+		<Vehicle name="chino2" caption="Chino Custom" />
+		<Vehicle name="clique" caption="Clique" />
+		<Vehicle name="clique2" caption="Clique Wagon" />
+		<Vehicle name="coquette3" caption="Coquette BlackFin" />
+		<Vehicle name="deviant" caption="Deviant" />
+		<Vehicle name="Dominator" caption="Dominator" />
+		<Vehicle name="dominator7" caption="Dominator ASP" />
+		<Vehicle name="driftdominator10" caption="Dominator FX" />
+		<Vehicle name="dominator10" caption="Dominator FX" />
+		<Vehicle name="driftdominator9" caption="Dominator GT" />
+		<Vehicle name="dominator9" caption="Dominator GT" />
+		<Vehicle name="dominator8" caption="Dominator GTT" />
+		<Vehicle name="dominator3" caption="Dominator GTX" />
+		<Vehicle name="yosemite2" caption="Drift Yosemite" />
+		<Vehicle name="driftyosemite" caption="Drift Yosemite" />
+		<Vehicle name="dukes2" caption="Duke O'Death" />
+		<Vehicle name="dukes" caption="Dukes" />
+		<Vehicle name="ellie" caption="Ellie" />
+		<Vehicle name="eudora" caption="Eudora" />
+		<Vehicle name="faction" caption="Faction" />
+		<Vehicle name="faction2" caption="Faction Custom 1" />
+		<Vehicle name="faction3" caption="Faction Custom Donk" />
+		<Vehicle name="dominator5" caption="Future Shock Dominator" />
+		<Vehicle name="impaler3" caption="Future Shock Impaler" />
+		<Vehicle name="imperator2" caption="Future Shock Imperator" />
+		<Vehicle name="slamvan5" caption="Future Shock Slamvan" />
+		<Vehicle name="Gauntlet" caption="Gauntlet" />
+		<Vehicle name="gauntlet3" caption="Gauntlet Classic" />
+		<Vehicle name="gauntlet5" caption="Gauntlet Classic Custom" />
+		<Vehicle name="gauntlet4" caption="Gauntlet Hellfire" />
+		<Vehicle name="driftgauntlet4" caption="Gauntlet Hellfire" />
+		<Vehicle name="greenwood" caption="Greenwood" />
+		<Vehicle name="hermes" caption="Hermes" />
+		<Vehicle name="hotknife" caption="Hotknife" />
+		<Vehicle name="hustler" caption="Hustler" />
+		<Vehicle name="impaler" caption="Impaler" />
+		<Vehicle name="impaler6" caption="Impaler LX" />
+		<Vehicle name="impaler5" caption="Impaler SZ" />
+		<Vehicle name="slamvan2" caption="Lost Slamvan" />
+		<Vehicle name="lurcher" caption="Lurcher" />
+		<Vehicle name="manana2" caption="Manana Custom" />
+		<Vehicle name="moonbeam" caption="Moonbeam" />
+		<Vehicle name="moonbeam2" caption="Moonbeam Custom" />
+		<Vehicle name="dominator6" caption="Nightmare Dominator" />
+		<Vehicle name="impaler4" caption="Nightmare Impaler" />
+		<Vehicle name="imperator3" caption="Nightmare Imperator" />
+		<Vehicle name="slamvan6" caption="Nightmare Slamvan" />
+		<Vehicle name="nightshade" caption="Nightshade" />
+		<Vehicle name="peyote2" caption="Peyote Gasser" />
+		<Vehicle name="Phoenix" caption="Phoenix" />
+		<Vehicle name="picador" caption="Picador" />
+		<Vehicle name="dominator2" caption="Pisswasser Dominator" />
+		<Vehicle name="ratloader" caption="Rat-Loader" />
+		<Vehicle name="ratloader2" caption="Rat-Truck" />
+		<Vehicle name="gauntlet2" caption="Redwood Gauntlet" />
+		<Vehicle name="ruiner" caption="Ruiner" />
+		<Vehicle name="ruiner3" caption="Ruiner" />
+		<Vehicle name="ruiner2" caption="Ruiner 2000" />
+		<Vehicle name="ruiner4" caption="Ruiner ZZ-8" />
+		<Vehicle name="sabregt" caption="Sabre Turbo" />
+		<Vehicle name="sabregt2" caption="Sabre Turbo Custom" />
+		<Vehicle name="slamvan" caption="Slamvan" />
+		<Vehicle name="slamvan3" caption="Slamvan Custom" />
+		<Vehicle name="stalion" caption="Stallion" />
+		<Vehicle name="tahoma" caption="Tahoma Coupe" />
+		<Vehicle name="tampa" caption="Tampa" />
+		<Vehicle name="tampa4" caption="Tampa GT" />
+		<Vehicle name="tulip" caption="Tulip" />
+		<Vehicle name="tulip2" caption="Tulip M-100" />
+		<Vehicle name="vamos" caption="Vamos" />
+		<Vehicle name="vigero" caption="Vigero" />
+		<Vehicle name="vigero2" caption="Vigero ZX" />
+		<Vehicle name="vigero3" caption="Vigero ZX Convertible" />
+		<Vehicle name="virgo" caption="Virgo" />
+		<Vehicle name="virgo3" caption="Virgo Classic" />
+		<Vehicle name="virgo2" caption="Virgo Classic Custom" />
+		<Vehicle name="voodoo2" caption="Voodoo" />
+		<Vehicle name="voodoo" caption="Voodoo Custom" />
+		<Vehicle name="tampa3" caption="Weaponized Tampa" />
+		<Vehicle name="weevil2" caption="Weevil Custom" />
+		<Vehicle name="yosemite" caption="Yosemite" />
+	</Category>
+	<Category name="Off_Road">
+		<Vehicle name="bruiser" caption="Apocalypse Bruiser" />
+		<Vehicle name="brutus" caption="Apocalypse Brutus" />
+		<Vehicle name="monster3" caption="Apocalypse Sasquatch" />
+		<Vehicle name="bifta" caption="Bifta" />
+		<Vehicle name="blazer" caption="Blazer" />
+		<Vehicle name="blazer5" caption="Blazer Aqua" />
+		<Vehicle name="blazer2" caption="Blazer Lifeguard" />
+		<Vehicle name="Bodhi2" caption="Bodhi" />
+		<Vehicle name="boor" caption="Boor" />
+		<Vehicle name="brawler" caption="Brawler" />
+		<Vehicle name="caracara" caption="Caracara" />
+		<Vehicle name="caracara2" caption="Caracara 4x4" />
+		<Vehicle name="trophytruck2" caption="Desert Raid" />
+		<Vehicle name="draugur" caption="Draugur" />
+		<Vehicle name="driftl352" caption="Drift Walton L35" />
+		<Vehicle name="dubsta3" caption="Dubsta 6x6" />
+		<Vehicle name="dune" caption="Dune Buggy" />
+		<Vehicle name="dune3" caption="Dune FAV" />
+		<Vehicle name="dloader" caption="Duneloader" />
+		<Vehicle name="everon" caption="Everon" />
+		<Vehicle name="firebolt" caption="Firebolt ASP" />
+		<Vehicle name="freecrawler" caption="Freecrawler" />
+		<Vehicle name="bruiser2" caption="Future Shock Bruiser" />
+		<Vehicle name="brutus2" caption="Future Shock Brutus" />
+		<Vehicle name="monster4" caption="Future Shock Sasquatch" />
+		<Vehicle name="hellion" caption="Hellion" />
+		<Vehicle name="blazer3" caption="Hot Rod Blazer" />
+		<Vehicle name="BfInjection" caption="Injection" />
+		<Vehicle name="insurgent2" caption="Insurgent" />
+		<Vehicle name="insurgent" caption="Insurgent Pick-Up" />
+		<Vehicle name="insurgent3" caption="Insurgent Pick-Up Custom" />
+		<Vehicle name="kalahari" caption="Kalahari" />
+		<Vehicle name="kamacho" caption="Kamacho" />
+		<Vehicle name="marshall" caption="Marshall" />
+		<Vehicle name="menacer" caption="Menacer" />
+		<Vehicle name="MESA3" caption="Mesa" />
+		<Vehicle name="monster" caption="Monster" />
+		<Vehicle name="monstrociti" caption="MonstroCiti" />
+		<Vehicle name="bruiser3" caption="Nightmare Bruiser" />
+		<Vehicle name="brutus3" caption="Nightmare Brutus" />
+		<Vehicle name="monster5" caption="Nightmare Sasquatch" />
+		<Vehicle name="nightshark" caption="Nightshark" />
+		<Vehicle name="outlaw" caption="Outlaw" />
+		<Vehicle name="patriot3" caption="Patriot Mil-Spec" />
+		<Vehicle name="dune4" caption="Ramp Buggy" />
+		<Vehicle name="dune5" caption="Ramp Buggy" />
+		<Vehicle name="RancherXL" caption="Rancher XL" />
+		<Vehicle name="rancherxl2" caption="Rancher XL" />
+		<Vehicle name="ratel" caption="Ratel" />
+		<Vehicle name="rcbandito" caption="RC Bandito" />
+		<Vehicle name="rebel2" caption="Rebel" />
+		<Vehicle name="riata" caption="Riata" />
+		<Vehicle name="Rebel" caption="Rusty Rebel" />
+		<Vehicle name="sandking2" caption="Sandking SWB" />
+		<Vehicle name="sandking" caption="Sandking XL" />
+		<Vehicle name="dune2" caption="Space Docker" />
+		<Vehicle name="blazer4" caption="Street Blazer" />
+		<Vehicle name="technical" caption="Technical" />
+		<Vehicle name="technical2" caption="Technical Aqua" />
+		<Vehicle name="technical3" caption="Technical Custom" />
+		<Vehicle name="terminus" caption="Terminus" />
+		<Vehicle name="trophytruck" caption="Trophy Truck" />
+		<Vehicle name="vagrant" caption="Vagrant" />
+		<Vehicle name="verus" caption="Verus" />
+		<Vehicle name="l35" caption="Walton L35" />
+		<Vehicle name="l352" caption="Walton L35 Stock" />
+		<Vehicle name="winky" caption="Winky" />
+		<Vehicle name="yosemite1500" caption="Yosemite 1500" />
+		<Vehicle name="yosemite3" caption="Yosemite Rancher" />
+		<Vehicle name="zhaba" caption="Zhaba" />
+	</Category>
+	<Category name="Open_Wheel">
+		<Vehicle name="openwheel1" caption="BR8" />
+		<Vehicle name="openwheel2" caption="DR1" />
+		<Vehicle name="formula" caption="PR4" />
+		<Vehicle name="formula2" caption="R88" />
+	</Category>
+	<Category name="Plane">
+		<Vehicle name="alphaz1" caption="Alpha-Z1" />
+		<Vehicle name="BLIMP" caption="Atomic Blimp" />
+		<Vehicle name="avenger3" caption="Avenger" />
+		<Vehicle name="avenger4" caption="Avenger" />
+		<Vehicle name="avenger" caption="Avenger" />
+		<Vehicle name="avenger2" caption="Avenger" />
+		<Vehicle name="strikeforce" caption="B-11 Strikeforce" />
+		<Vehicle name="besra" caption="Besra" />
+		<Vehicle name="blimp3" caption="Blimp" />
+		<Vehicle name="cargoplane" caption="Cargo Plane" />
+		<Vehicle name="cargoplane2" caption="Cargo Plane" />
+		<Vehicle name="cuban800" caption="Cuban 800" />
+		<Vehicle name="dodo" caption="Dodo" />
+		<Vehicle name="duster" caption="Duster" />
+		<Vehicle name="duster2" caption="Duster 300-H" />
+		<Vehicle name="raiju" caption="F-160 Raiju" />
+		<Vehicle name="howard" caption="Howard NX-25" />
+		<Vehicle name="hydra" caption="Hydra" />
+		<Vehicle name="jet" caption="Jet" />
+		<Vehicle name="starling" caption="LF-22 Starling" />
+		<Vehicle name="luxor" caption="Luxor" />
+		<Vehicle name="luxor2" caption="Luxor Deluxe" />
+		<Vehicle name="Stunt" caption="Mallard" />
+		<Vehicle name="mammatus" caption="Mammatus" />
+		<Vehicle name="Miljet" caption="Miljet" />
+		<Vehicle name="mogul" caption="Mogul" />
+		<Vehicle name="nimbus" caption="Nimbus" />
+		<Vehicle name="nokota" caption="P-45 Nokota" />
+		<Vehicle name="Lazer" caption="P-996 LAZER" />
+		<Vehicle name="pyro" caption="Pyro" />
+		<Vehicle name="bombushka" caption="RM-10 Bombushka" />
+		<Vehicle name="alkonost" caption="RO-86 Alkonost" />
+		<Vehicle name="rogue" caption="Rogue" />
+		<Vehicle name="seabreeze" caption="Seabreeze" />
+		<Vehicle name="Shamal" caption="Shamal" />
+		<Vehicle name="streamer216" caption="Streamer216" />
+		<Vehicle name="titan" caption="Titan" />
+		<Vehicle name="titan2" caption="Titan 250 D" />
+		<Vehicle name="tula" caption="Tula" />
+		<Vehicle name="microlight" caption="Ultralight" />
+		<Vehicle name="molotok" caption="V-65 Molotok" />
+		<Vehicle name="velum" caption="Velum" />
+		<Vehicle name="velum2" caption="Velum 5-Seater" />
+		<Vehicle name="vestra" caption="Vestra" />
+		<Vehicle name="volatol" caption="Volatol" />
+		<Vehicle name="BLIMP2" caption="Xero Blimp" />
+	</Category>
+	<Category name="Rail">
+		<Vehicle name="cablecar" caption="Cable Car" />
+		<Vehicle name="freightcont2" caption="Freight Train" />
+		<Vehicle name="freightcont1" caption="Freight Train" />
+		<Vehicle name="freightgrain" caption="Freight Train" />
+		<Vehicle name="tankercar" caption="Freight Train" />
+		<Vehicle name="metrotrain" caption="Freight Train" />
+		<Vehicle name="freight2" caption="Freight Train" />
+		<Vehicle name="freight" caption="Freight Train" />
+		<Vehicle name="freightcar" caption="Freight Train" />
+		<Vehicle name="freightcar3" caption="Freight Train" />
+		<Vehicle name="freightcar2" caption="Freight Train" />
+	</Category>
+	<Category name="Sedan">
+		<Vehicle name="asea2" caption="Asea" />
+		<Vehicle name="asea" caption="Asea" />
+		<Vehicle name="asterope" caption="Asterope" />
+		<Vehicle name="asterope2" caption="Asterope GZ" />
+		<Vehicle name="driftchavosv6" caption="Chavos V6" />
+		<Vehicle name="chavosv6" caption="Chavos V6" />
+		<Vehicle name="cinquemila" caption="Cinquemila" />
+		<Vehicle name="cognoscenti" caption="Cognoscenti" />
+		<Vehicle name="cognoscenti2" caption="Cognoscenti (Armored)" />
+		<Vehicle name="cog55" caption="Cognoscenti 55" />
+		<Vehicle name="cog552" caption="Cognoscenti 55 (Armored)" />
+		<Vehicle name="deity" caption="Deity" />
+		<Vehicle name="emperor" caption="Emperor" />
+		<Vehicle name="emperor3" caption="Emperor" />
+		<Vehicle name="Emperor2" caption="Emperor" />
+		<Vehicle name="fugitive" caption="Fugitive" />
+		<Vehicle name="glendale" caption="Glendale" />
+		<Vehicle name="glendale2" caption="Glendale Custom" />
+		<Vehicle name="hardy" caption="Hardy" />
+		<Vehicle name="drifthardy" caption="Hardy" />
+		<Vehicle name="ingot" caption="Ingot" />
+		<Vehicle name="intruder" caption="Intruder" />
+		<Vehicle name="minimus" caption="Minimus" />
+		<Vehicle name="premier" caption="Premier" />
+		<Vehicle name="primo" caption="Primo" />
+		<Vehicle name="primo2" caption="Primo Custom" />
+		<Vehicle name="regina" caption="Regina" />
+		<Vehicle name="rhinehart" caption="Rhinehart" />
+		<Vehicle name="romero" caption="Romero Hearse" />
+		<Vehicle name="schafter2" caption="Schafter" />
+		<Vehicle name="schafter6" caption="Schafter LWB (Armored)" />
+		<Vehicle name="schafter5" caption="Schafter V12 (Armored)" />
+		<Vehicle name="sentinel6" caption="Sentinel XS4" />
+		<Vehicle name="stafford" caption="Stafford" />
+		<Vehicle name="stanier" caption="Stanier" />
+		<Vehicle name="stratum" caption="Stratum" />
+		<Vehicle name="stretch" caption="Stretch" />
+		<Vehicle name="superd" caption="Super Diamond" />
+		<Vehicle name="surge" caption="Surge" />
+		<Vehicle name="tailgater" caption="Tailgater" />
+		<Vehicle name="tailgater2" caption="Tailgater S" />
+		<Vehicle name="limo2" caption="Turreted Limo" />
+		<Vehicle name="vorschlaghammer" caption="Vorschlaghammer" />
+		<Vehicle name="driftvorschlag" caption="Vorschlaghammer" />
+		<Vehicle name="warrener" caption="Warrener" />
+		<Vehicle name="warrener2" caption="Warrener HKR" />
+		<Vehicle name="washington" caption="Washington" />
+	</Category>
+	<Category name="Service">
+		<Vehicle name="Airbus" caption="Airport Bus" />
+		<Vehicle name="brickade" caption="Brickade" />
+		<Vehicle name="brickade2" caption="Brickade 6x6" />
+		<Vehicle name="BUS" caption="Bus" />
+		<Vehicle name="coach" caption="Dashound" />
+		<Vehicle name="rallytruck" caption="Dune" />
+		<Vehicle name="pbus2" caption="Festival Bus" />
+		<Vehicle name="Rentalbus" caption="Rental Shuttle Bus" />
+		<Vehicle name="taxi" caption="Taxi" />
+		<Vehicle name="TOURBUS" caption="Tour Bus" />
+		<Vehicle name="trash2" caption="Trashmaster" />
+		<Vehicle name="Trash" caption="Trashmaster" />
+		<Vehicle name="vivanite2" caption="Vivanite" />
+		<Vehicle name="wastelander" caption="Wastelander" />
+	</Category>
+	<Category name="Sport">
+		<Vehicle name="tenf" caption="10F" />
+		<Vehicle name="tenf2" caption="10F Widebody" />
+		<Vehicle name="r300" caption="300R" />
+		<Vehicle name="drafter" caption="8F Drafter" />
+		<Vehicle name="ninef" caption="9F" />
+		<Vehicle name="ninef2" caption="9F Cabrio" />
+		<Vehicle name="alpha" caption="Alpha" />
+		<Vehicle name="zr380" caption="Apocalypse ZR380" />
+		<Vehicle name="banshee" caption="Banshee" />
+		<Vehicle name="banshee3" caption="Banshee GTS" />
+		<Vehicle name="bestiagts" caption="Bestia GTS" />
+		<Vehicle name="blista2" caption="Blista Compact" />
+		<Vehicle name="buffalo" caption="Buffalo" />
+		<Vehicle name="buffalo2" caption="Buffalo S" />
+		<Vehicle name="calico" caption="Calico GTF" />
+		<Vehicle name="carbonizzare" caption="Carbonizzare" />
+		<Vehicle name="comet2" caption="Comet" />
+		<Vehicle name="comet3" caption="Comet Retro Custom" />
+		<Vehicle name="comet6" caption="Comet S2" />
+		<Vehicle name="comet7" caption="Comet S2 Cabrio" />
+		<Vehicle name="comet4" caption="Comet Safari" />
+		<Vehicle name="comet5" caption="Comet SR" />
+		<Vehicle name="coquette" caption="Coquette" />
+		<Vehicle name="coquette4" caption="Coquette D10" />
+		<Vehicle name="coquette6" caption="Coquette D5" />
+		<Vehicle name="corsita" caption="Corsita" />
+		<Vehicle name="cypher" caption="Cypher" />
+		<Vehicle name="driftcypher" caption="Cypher" />
+		<Vehicle name="drifttampa" caption="Drift Tampa" />
+		<Vehicle name="tampa2" caption="Drift Tampa" />
+		<Vehicle name="elegy" caption="Elegy Retro Custom" />
+		<Vehicle name="elegy2" caption="Elegy RH8" />
+		<Vehicle name="envisage" caption="Envisage" />
+		<Vehicle name="Euros" caption="Euros" />
+		<Vehicle name="drifteuros" caption="Euros" />
+		<Vehicle name="feltzer2" caption="Feltzer" />
+		<Vehicle name="flashgt" caption="Flash GT" />
+		<Vehicle name="furoregt" caption="Furore GT" />
+		<Vehicle name="fusilade" caption="Fusilade" />
+		<Vehicle name="futo" caption="Futo" />
+		<Vehicle name="driftfuto2" caption="Futo" />
+		<Vehicle name="futo2" caption="Futo GTX" />
+		<Vehicle name="driftfuto" caption="Futo GTX" />
+		<Vehicle name="zr3802" caption="Future Shock ZR380" />
+		<Vehicle name="gb200" caption="GB200" />
+		<Vehicle name="blista3" caption="Go Go Monkey Blista" />
+		<Vehicle name="growler" caption="Growler" />
+		<Vehicle name="everon2" caption="Hotring Everon" />
+		<Vehicle name="gauntlet6" caption="Hotring Hellfire" />
+		<Vehicle name="hotring" caption="Hotring Sabre" />
+		<Vehicle name="imorgon" caption="Imorgon" />
+		<Vehicle name="issi7" caption="Issi Sport" />
+		<Vehicle name="italigto" caption="Itali GTO" />
+		<Vehicle name="stingertt" caption="Itali GTO Stinger TT" />
+		<Vehicle name="italirsx" caption="Itali RSX" />
+		<Vehicle name="jester" caption="Jester" />
+		<Vehicle name="jester2" caption="Jester (Racecar)" />
+		<Vehicle name="jester3" caption="Jester Classic" />
+		<Vehicle name="jester4" caption="Jester RR" />
+		<Vehicle name="driftjester" caption="Jester RR" />
+		<Vehicle name="jester5" caption="Jester RR Widebody" />
+		<Vehicle name="jugular" caption="Jugular" />
+		<Vehicle name="khamelion" caption="Khamelion" />
+		<Vehicle name="komoda" caption="Komoda" />
+		<Vehicle name="kuruma" caption="Kuruma" />
+		<Vehicle name="kuruma2" caption="Kuruma (Armored)" />
+		<Vehicle name="coureur" caption="La Coureuse" />
+		<Vehicle name="locust" caption="Locust" />
+		<Vehicle name="lynx" caption="Lynx" />
+		<Vehicle name="massacro" caption="Massacro" />
+		<Vehicle name="massacro2" caption="Massacro (Racecar)" />
+		<Vehicle name="neo" caption="Neo" />
+		<Vehicle name="neon" caption="Neon" />
+		<Vehicle name="zr3803" caption="Nightmare ZR380" />
+		<Vehicle name="niobe" caption="Niobe" />
+		<Vehicle name="omnis" caption="Omnis" />
+		<Vehicle name="omnisegt" caption="Omnis e-GT" />
+		<Vehicle name="panthere" caption="Panthere" />
+		<Vehicle name="paragon" caption="Paragon R" />
+		<Vehicle name="paragon2" caption="Paragon R (Armored)" />
+		<Vehicle name="paragon3" caption="Paragon S" />
+		<Vehicle name="pariah" caption="Pariah" />
+		<Vehicle name="penumbra" caption="Penumbra" />
+		<Vehicle name="penumbra2" caption="Penumbra FF" />
+		<Vehicle name="raiden" caption="Raiden" />
+		<Vehicle name="RapidGT" caption="Rapid GT" />
+		<Vehicle name="RapidGT2" caption="Rapid GT" />
+		<Vehicle name="rapidgt4" caption="Rapid GT X" />
+		<Vehicle name="raptor" caption="Raptor" />
+		<Vehicle name="driftremus" caption="Remus" />
+		<Vehicle name="remus" caption="Remus" />
+		<Vehicle name="revolter" caption="Revolter" />
+		<Vehicle name="rt3000" caption="RT3000" />
+		<Vehicle name="driftrt3000" caption="RT3000" />
+		<Vehicle name="ruston" caption="Ruston" />
+		<Vehicle name="s95" caption="S95" />
+		<Vehicle name="schafter4" caption="Schafter LWB" />
+		<Vehicle name="schafter3" caption="Schafter V12" />
+		<Vehicle name="schlagen" caption="Schlagen GT" />
+		<Vehicle name="schwarzer" caption="Schwartzer" />
+		<Vehicle name="sentinel3" caption="Sentinel" />
+		<Vehicle name="driftsentinel" caption="Sentinel Classic Widebody" />
+		<Vehicle name="sentinel4" caption="Sentinel Classic Widebody" />
+		<Vehicle name="sentinel5" caption="Sentinel GTS" />
+		<Vehicle name="SEVEN70" caption="Seven-70" />
+		<Vehicle name="sm722" caption="SM722" />
+		<Vehicle name="SPECTER" caption="Specter" />
+		<Vehicle name="SPECTER2" caption="Specter Custom" />
+		<Vehicle name="buffalo3" caption="Sprunk Buffalo" />
+		<Vehicle name="streiter" caption="Streiter" />
+		<Vehicle name="Sugoi" caption="Sugoi" />
+		<Vehicle name="sultan" caption="Sultan" />
+		<Vehicle name="sultan2" caption="Sultan Classic" />
+		<Vehicle name="sultan3" caption="Sultan RS Classic" />
+		<Vehicle name="Surano" caption="Surano" />
+		<Vehicle name="tropos" caption="Tropos Rallye" />
+		<Vehicle name="vectre" caption="Vectre" />
+		<Vehicle name="verlierer2" caption="Verlierer" />
+		<Vehicle name="veto" caption="Veto Classic" />
+		<Vehicle name="veto2" caption="Veto Modern" />
+		<Vehicle name="vstr" caption="V-STR" />
+		<Vehicle name="zr350" caption="ZR350" />
+		<Vehicle name="driftzr350" caption="ZR350" />
+	</Category>
+	<Category name="Sport_Classic">
+		<Vehicle name="z190" caption="190z" />
+		<Vehicle name="ardent" caption="Ardent" />
+		<Vehicle name="astrale" caption="Astrale" />
+		<Vehicle name="casco" caption="Casco" />
+		<Vehicle name="driftcheburek" caption="Cheburek" />
+		<Vehicle name="cheburek" caption="Cheburek" />
+		<Vehicle name="cheetah2" caption="Cheetah Classic" />
+		<Vehicle name="coquette2" caption="Coquette Classic" />
+		<Vehicle name="coquette5" caption="Coquette D1" />
+		<Vehicle name="deluxo" caption="Deluxo" />
+		<Vehicle name="Dynasty" caption="Dynasty" />
+		<Vehicle name="fagaloa" caption="Fagaloa" />
+		<Vehicle name="feltzer3" caption="Feltzer Classic" />
+		<Vehicle name="btype2" caption="FrÃ¤nken Stange" />
+		<Vehicle name="gt500" caption="GT500" />
+		<Vehicle name="gt750" caption="GT750" />
+		<Vehicle name="infernus2" caption="Infernus Classic" />
+		<Vehicle name="itali2" caption="Itali Classic" />
+		<Vehicle name="jb700" caption="JB 700" />
+		<Vehicle name="jb7002" caption="JB 700W" />
+		<Vehicle name="driftjester3" caption="Jester Classic" />
+		<Vehicle name="cheetah3" caption="LSCM Cheetah Classic" />
+		<Vehicle name="mamba" caption="Mamba" />
+		<Vehicle name="manana" caption="Manana" />
+		<Vehicle name="michelli" caption="Michelli GT" />
+		<Vehicle name="monroe" caption="Monroe" />
+		<Vehicle name="nebula" caption="Nebula Turbo" />
+		<Vehicle name="driftnebula" caption="Nebula Turbo" />
+		<Vehicle name="peyote" caption="Peyote" />
+		<Vehicle name="peyote3" caption="Peyote Custom" />
+		<Vehicle name="pigalle" caption="Pigalle" />
+		<Vehicle name="rapidgt3" caption="Rapid GT Classic" />
+		<Vehicle name="retinue" caption="Retinue" />
+		<Vehicle name="retinue2" caption="Retinue Mk II" />
+		<Vehicle name="btype" caption="Roosevelt" />
+		<Vehicle name="btype3" caption="Roosevelt Valor" />
+		<Vehicle name="savestra" caption="Savestra" />
+		<Vehicle name="stinger" caption="Stinger" />
+		<Vehicle name="stingergt" caption="Stinger GT" />
+		<Vehicle name="stromberg" caption="Stromberg" />
+		<Vehicle name="swinger" caption="Swinger" />
+		<Vehicle name="toreador" caption="Toreador" />
+		<Vehicle name="torero" caption="Torero" />
+		<Vehicle name="tornado4" caption="Tornado" />
+		<Vehicle name="tornado2" caption="Tornado" />
+		<Vehicle name="tornado" caption="Tornado" />
+		<Vehicle name="tornado3" caption="Tornado" />
+		<Vehicle name="tornado5" caption="Tornado Custom" />
+		<Vehicle name="tornado6" caption="Tornado Rat Rod" />
+		<Vehicle name="turismo2" caption="Turismo Classic" />
+		<Vehicle name="uranus" caption="Uranus LozSpeed" />
+		<Vehicle name="viseris" caption="Viseris" />
+		<Vehicle name="zion3" caption="Zion Classic" />
+		<Vehicle name="Ztype" caption="Z-Type" />
+	</Category>
+	<Category name="Super">
+		<Vehicle name="pfister811" caption="811" />
+		<Vehicle name="adder" caption="Adder" />
+		<Vehicle name="autarch" caption="Autarch" />
+		<Vehicle name="banshee2" caption="Banshee 900R" />
+		<Vehicle name="bullet" caption="Bullet" />
+		<Vehicle name="champion" caption="Champion" />
+		<Vehicle name="cheetah" caption="Cheetah" />
+		<Vehicle name="cyclone" caption="Cyclone" />
+		<Vehicle name="cyclone2" caption="Cyclone II" />
+		<Vehicle name="deveste" caption="Deveste Eight" />
+		<Vehicle name="emerus" caption="Emerus" />
+		<Vehicle name="entity3" caption="Entity MT" />
+		<Vehicle name="entityxf" caption="Entity XF" />
+		<Vehicle name="entity2" caption="Entity XXR" />
+		<Vehicle name="sheava" caption="ETR1" />
+		<Vehicle name="fmj" caption="FMJ" />
+		<Vehicle name="fmj2" caption="FMJ MK V" />
+		<Vehicle name="furia" caption="Furia" />
+		<Vehicle name="gp1" caption="GP1" />
+		<Vehicle name="ignus" caption="Ignus" />
+		<Vehicle name="infernus" caption="Infernus" />
+		<Vehicle name="italigtb" caption="Itali GTB" />
+		<Vehicle name="italigtb2" caption="Itali GTB Custom" />
+		<Vehicle name="krieger" caption="Krieger" />
+		<Vehicle name="lm87" caption="LM87" />
+		<Vehicle name="luiva" caption="Luiva" />
+		<Vehicle name="nero" caption="Nero" />
+		<Vehicle name="nero2" caption="Nero Custom" />
+		<Vehicle name="osiris" caption="Osiris" />
+		<Vehicle name="penetrator" caption="Penetrator" />
+		<Vehicle name="pipistrello" caption="Pipistrello" />
+		<Vehicle name="le7b" caption="RE-7B" />
+		<Vehicle name="reaper" caption="Reaper" />
+		<Vehicle name="voltic2" caption="Rocket Voltic" />
+		<Vehicle name="s80" caption="S80RR" />
+		<Vehicle name="sc1" caption="SC1" />
+		<Vehicle name="scramjet" caption="Scramjet" />
+		<Vehicle name="sultanrs" caption="Sultan RS" />
+		<Vehicle name="suzume" caption="Suzume" />
+		<Vehicle name="t20" caption="T20" />
+		<Vehicle name="taipan" caption="Taipan" />
+		<Vehicle name="tempesta" caption="Tempesta" />
+		<Vehicle name="tezeract" caption="Tezeract" />
+		<Vehicle name="thrax" caption="Thrax" />
+		<Vehicle name="tigon" caption="Tigon" />
+		<Vehicle name="torero2" caption="Torero XO" />
+		<Vehicle name="turismo3" caption="Turismo Omaggio" />
+		<Vehicle name="turismor" caption="Turismo R" />
+		<Vehicle name="tyrant" caption="Tyrant" />
+		<Vehicle name="tyrus" caption="Tyrus" />
+		<Vehicle name="vacca" caption="Vacca" />
+		<Vehicle name="vagner" caption="Vagner" />
+		<Vehicle name="vigilante" caption="Vigilante" />
+		<Vehicle name="virtue" caption="Virtue" />
+		<Vehicle name="visione" caption="Visione" />
+		<Vehicle name="voltic" caption="Voltic" />
+		<Vehicle name="ignus2" caption="Weaponized Ignus" />
+		<Vehicle name="prototipo" caption="X80 Proto" />
+		<Vehicle name="xa21" caption="XA-21" />
+		<Vehicle name="xtreme" caption="X-treme" />
+		<Vehicle name="zeno" caption="Zeno" />
+		<Vehicle name="zentorno" caption="Zentorno" />
+		<Vehicle name="zorrusso" caption="Zorrusso" />
+	</Category>
+	<Category name="Suv">
+		<Vehicle name="aleutian" caption="Aleutian" />
+		<Vehicle name="astron" caption="Astron" />
+		<Vehicle name="astron2" caption="Astron Custom" />
+		<Vehicle name="baller2" caption="Baller" />
+		<Vehicle name="Baller" caption="Baller" />
+		<Vehicle name="baller3" caption="Baller LE" />
+		<Vehicle name="baller5" caption="Baller LE (Armored)" />
+		<Vehicle name="baller4" caption="Baller LE LWB" />
+		<Vehicle name="baller6" caption="Baller LE LWB (Armored)" />
+		<Vehicle name="baller7" caption="Baller ST" />
+		<Vehicle name="baller8" caption="Baller ST-D" />
+		<Vehicle name="BjXL" caption="BeeJay XL" />
+		<Vehicle name="castigator" caption="Castigator" />
+		<Vehicle name="cavalcade2" caption="Cavalcade" />
+		<Vehicle name="cavalcade" caption="Cavalcade" />
+		<Vehicle name="cavalcade3" caption="Cavalcade XL" />
+		<Vehicle name="contender" caption="Contender" />
+		<Vehicle name="dorado" caption="Dorado" />
+		<Vehicle name="dubsta2" caption="Dubsta" />
+		<Vehicle name="dubsta" caption="Dubsta" />
+		<Vehicle name="everon3" caption="Everon RS" />
+		<Vehicle name="fq2" caption="FQ 2" />
+		<Vehicle name="GRANGER" caption="Granger" />
+		<Vehicle name="granger2" caption="Granger 3600LX" />
+		<Vehicle name="gresley" caption="Gresley" />
+		<Vehicle name="habanero" caption="Habanero" />
+		<Vehicle name="huntley" caption="Huntley S" />
+		<Vehicle name="issi8" caption="Issi Rally" />
+		<Vehicle name="iwagen" caption="I-Wagen" />
+		<Vehicle name="jubilee" caption="Jubilee" />
+		<Vehicle name="landstalker" caption="Landstalker" />
+		<Vehicle name="landstalker2" caption="Landstalker XL" />
+		<Vehicle name="mesa2" caption="Mesa" />
+		<Vehicle name="MESA" caption="Mesa" />
+		<Vehicle name="Novak" caption="Novak" />
+		<Vehicle name="patriot" caption="Patriot" />
+		<Vehicle name="patriot2" caption="Patriot Stretch" />
+		<Vehicle name="radi" caption="Radius" />
+		<Vehicle name="rebla" caption="Rebla GTS" />
+		<Vehicle name="rocoto" caption="Rocoto" />
+		<Vehicle name="Seminole" caption="Seminole" />
+		<Vehicle name="seminole2" caption="Seminole Frontier" />
+		<Vehicle name="serrano" caption="Serrano" />
+		<Vehicle name="squaddie" caption="Squaddie" />
+		<Vehicle name="toros" caption="Toros" />
+		<Vehicle name="vivanite" caption="Vivanite" />
+		<Vehicle name="woodlander" caption="Woodlander" />
+		<Vehicle name="xls" caption="XLS" />
+		<Vehicle name="xls2" caption="XLS (Armored)" />
+	</Category>
+	<Category name="Utility">
+		<Vehicle name="freighttrailer" caption="freighttrailer" />
+		<Vehicle name="docktrailer" caption="docktrailer" />
+		<Vehicle name="tanker2" caption="tanker2" />
+		<Vehicle name="proptrailer" caption="proptrailer" />
+		<Vehicle name="Airtug" caption="Airtug" />
+		<Vehicle name="armytrailer2" caption="Army Trailer" />
+		<Vehicle name="armytrailer" caption="Army Trailer" />
+		<Vehicle name="armytanker" caption="Army Trailer" />
+		<Vehicle name="baletrailer" caption="Baletrailer" />
+		<Vehicle name="boattrailer" caption="Boat Trailer" />
+		<Vehicle name="boattrailer2" caption="Boat Trailer" />
+		<Vehicle name="boattrailer3" caption="Boat Trailer" />
+		<Vehicle name="Caddy2" caption="Caddy" />
+		<Vehicle name="caddy3" caption="Caddy" />
+		<Vehicle name="caddy" caption="Caddy" />
+		<Vehicle name="docktug" caption="Docktug" />
+		<Vehicle name="tractor3" caption="Fieldmaster" />
+		<Vehicle name="tractor2" caption="Fieldmaster" />
+		<Vehicle name="FORKLIFT" caption="Forklift" />
+		<Vehicle name="graintrailer" caption="Graintrailer" />
+		<Vehicle name="keitora" caption="Keitora" />
+		<Vehicle name="driftkeitora" caption="Keitora" />
+		<Vehicle name="Mower" caption="Lawn Mower" />
+		<Vehicle name="trailerlarge" caption="Mobile Operations Center" />
+		<Vehicle name="Ripley" caption="Ripley" />
+		<Vehicle name="sadler2" caption="Sadler" />
+		<Vehicle name="Sadler" caption="Sadler" />
+		<Vehicle name="scrap" caption="Scrap Truck" />
+		<Vehicle name="slamtruck" caption="Slamtruck" />
+		<Vehicle name="towtruck4" caption="Tow Truck" />
+		<Vehicle name="TOWTRUCK" caption="Tow Truck" />
+		<Vehicle name="Towtruck2" caption="Tow Truck" />
+		<Vehicle name="towtruck3" caption="Tow Truck" />
+		<Vehicle name="TRACTOR" caption="Tractor" />
+		<Vehicle name="trailers3" caption="Trailer" />
+		<Vehicle name="trailers4" caption="Trailer" />
+		<Vehicle name="trailers5" caption="Trailer" />
+		<Vehicle name="tvtrailer" caption="Trailer" />
+		<Vehicle name="tvtrailer2" caption="Trailer" />
+		<Vehicle name="trailersmall" caption="Trailer" />
+		<Vehicle name="trflat" caption="Trailer" />
+		<Vehicle name="trailers2" caption="Trailer" />
+		<Vehicle name="tr4" caption="Trailer" />
+		<Vehicle name="tr3" caption="Trailer" />
+		<Vehicle name="tr2" caption="Trailer" />
+		<Vehicle name="tanker" caption="Trailer" />
+		<Vehicle name="trailers" caption="Trailer" />
+		<Vehicle name="trailerlogs" caption="Trailer" />
+		<Vehicle name="raketrailer" caption="Trailer" />
+		<Vehicle name="Utillitruck3" caption="Utility Truck" />
+		<Vehicle name="utillitruck2" caption="Utility Truck" />
+		<Vehicle name="utillitruck" caption="Utility Truck" />
+	</Category>
+	<Category name="Van">
+		<Vehicle name="boxville5" caption="Armored Boxville" />
+		<Vehicle name="Bison3" caption="Bison" />
+		<Vehicle name="bison" caption="Bison" />
+		<Vehicle name="Bison2" caption="Bison" />
+		<Vehicle name="bobcatXL" caption="Bobcat XL" />
+		<Vehicle name="boxville4" caption="Boxville" />
+		<Vehicle name="boxville3" caption="Boxville" />
+		<Vehicle name="boxville" caption="Boxville" />
+		<Vehicle name="boxville2" caption="Boxville" />
+		<Vehicle name="boxville6" caption="Boxville (LSDS)" />
+		<Vehicle name="burrito2" caption="Bugstars Burrito" />
+		<Vehicle name="Burrito4" caption="Burrito" />
+		<Vehicle name="burrito5" caption="Burrito" />
+		<Vehicle name="Burrito" caption="Burrito" />
+		<Vehicle name="burrito3" caption="Burrito" />
+		<Vehicle name="CAMPER" caption="Camper" />
+		<Vehicle name="speedo2" caption="Clown Van" />
+		<Vehicle name="gburrito" caption="Gang Burrito" />
+		<Vehicle name="gburrito2" caption="Gang Burrito" />
+		<Vehicle name="journey" caption="Journey" />
+		<Vehicle name="journey2" caption="Journey II" />
+		<Vehicle name="minivan" caption="Minivan" />
+		<Vehicle name="minivan2" caption="Minivan Custom" />
+		<Vehicle name="paradise" caption="Paradise" />
+		<Vehicle name="pony" caption="Pony" />
+		<Vehicle name="pony2" caption="Pony" />
+		<Vehicle name="rumpo2" caption="Rumpo" />
+		<Vehicle name="rumpo" caption="Rumpo" />
+		<Vehicle name="rumpo3" caption="Rumpo Custom" />
+		<Vehicle name="speedo" caption="Speedo" />
+		<Vehicle name="speedo5" caption="Speedo Custom" />
+		<Vehicle name="speedo4" caption="Speedo Custom" />
+		<Vehicle name="Surfer2" caption="Surfer" />
+		<Vehicle name="SURFER" caption="Surfer" />
+		<Vehicle name="surfer3" caption="Surfer Custom" />
+		<Vehicle name="Taco" caption="Taco Van" />
+		<Vehicle name="youga" caption="Youga" />
+		<Vehicle name="youga2" caption="Youga Classic" />
+		<Vehicle name="youga3" caption="Youga Classic 4x4" />
+		<Vehicle name="youga5" caption="Youga Custom" />
+		<Vehicle name="youga4" caption="Youga Custom" />
+	</Category>
+</VehicleList>

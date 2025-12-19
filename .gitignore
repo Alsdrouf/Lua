@@ -1,6 +1,8 @@
 *
 !.gitignore
 !Spooner.lua
-!Spooner/Assets/VehicleList.xml
-!Spooner/Assets/PedList.xml
-!Spooner/Assets/PropList.xml
+!/Spooner
+!/Spooner/Assets
+!/Spooner/Assets/VehicleList.xml
+!/Spooner/Assets/PedList.xml
+!/Spooner/Assets/PropList.xml
