@@ -309,18 +309,18 @@ end
 function EntityLists.BuildNameCache()
     EntityLists.NameCache = {}
 
-    -- Cache prop names by hash
+    -- Cache prop names by hash (use sJoaat for signed hash to match ENTITY.GET_ENTITY_MODEL)
     for _, props in pairs(EntityLists.Props) do
         for _, prop in ipairs(props) do
-            local hash = tonumber(prop.hash) or Utils.Joaat(prop.hash)
+                local hash = Utils.sJoaat(prop.hash)
                 EntityLists.NameCache[hash] = prop.name
             end
         end
 
-    -- Cache ped names by hash
+    -- Cache ped names by hash (use sJoaat for signed hash to match ENTITY.GET_ENTITY_MODEL)
     for _, peds in pairs(EntityLists.Peds) do
         for _, ped in ipairs(peds) do
-            local hash = Utils.Joaat(ped.name)
+            local hash = Utils.sJoaat(ped.name)
                         local displayName = (ped.caption and ped.caption ~= "") and ped.caption or ped.name
             EntityLists.NameCache[hash] = displayName
         end
@@ -1115,7 +1115,7 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
 end
 
 function Spawner.SpawnProp(hashString, propName)
-    local hash = tonumber(hashString) or Utils.Joaat(hashString)
+    local hash = Utils.Joaat(hashString)
     local name = propName or hashString
     Spawner.SelectEntity("prop", name, hash)
 end
