@@ -164,7 +164,9 @@ local EntityLists = {
     -- Filter states for each tab
     PropFilter = "",
     VehicleFilter = "",
-    PedFilter = ""
+    PedFilter = "",
+    -- Cache for model hash to name lookups
+    NameCache = {}   -- { [modelHash] = displayName }
 }
 
 function EntityLists.LoadPropList(filePath)
@@ -304,10 +306,34 @@ function EntityLists.LoadPedList(filePath)
     return true
 end
 
+function EntityLists.BuildNameCache()
+    EntityLists.NameCache = {}
+
+    -- Cache prop names by hash
+    for _, props in pairs(EntityLists.Props) do
+        for _, prop in ipairs(props) do
+            local hash = tonumber(prop.hash) or Utils.Joaat(prop.hash)
+            EntityLists.NameCache[hash] = prop.name
+        end
+    end
+
+    -- Cache ped names by hash
+    for _, peds in pairs(EntityLists.Peds) do
+        for _, ped in ipairs(peds) do
+            local hash = Utils.Joaat(ped.name)
+            local displayName = (ped.caption and ped.caption ~= "") and ped.caption or ped.name
+            EntityLists.NameCache[hash] = displayName
+        end
+    end
+
+    CustomLogger.Info("Built name cache with " .. tostring(#EntityLists.NameCache) .. " entries")
+end
+
 function EntityLists.LoadAll()
     EntityLists.LoadPropList(propListPath)
     EntityLists.LoadVehicleList(vehicleListPath)
     EntityLists.LoadPedList(pedListPath)
+    EntityLists.BuildNameCache()
 end
 
 -- ============================================================================
@@ -1010,13 +1036,61 @@ function Spawner.LoadModel(modelHash, timeout)
     return true
 end
 
-function Spawner.SelectEntity(entityType, modelName, modelHash)
-    -- Clear existing preview if any, but keep the rotation and offset
-    Spawner.ClearPreview(true, true)
+function Spawner.GetModelSize(modelHash)
+    -- Load model temporarily to get dimensions
+    STREAMING.REQUEST_MODEL(modelHash)
+    local timeout = Time.GetEpocheMs() + 1000
+    while not STREAMING.HAS_MODEL_LOADED(modelHash) and Time.GetEpocheMs() < timeout do
+        Script.Yield(0)
+    end
 
-    Spooner.previewEntityType = entityType
-    Spooner.previewModelName = modelName
-    Spooner.previewModelHash = modelHash
+    if not STREAMING.HAS_MODEL_LOADED(modelHash) then
+        return 10.0  -- Default distance if model can't load
+    end
+
+    local min = Memory.Alloc(24)
+    local max = Memory.Alloc(24)
+    MISC.GET_MODEL_DIMENSIONS(modelHash, min, max)
+
+    local minX = Memory.ReadFloat(min)
+    local minY = Memory.ReadFloat(min + 8)
+    local minZ = Memory.ReadFloat(min + 16)
+    local maxX = Memory.ReadFloat(max)
+    local maxY = Memory.ReadFloat(max + 8)
+    local maxZ = Memory.ReadFloat(max + 16)
+
+    Memory.Free(min)
+    Memory.Free(max)
+
+    -- Calculate the diagonal size of the bounding box
+    local sizeX = maxX - minX
+    local sizeY = maxY - minY
+    local sizeZ = maxZ - minZ
+    local diagonalSize = math.sqrt(sizeX * sizeX + sizeY * sizeY + sizeZ * sizeZ)
+
+    return diagonalSize
+end
+
+function Spawner.SelectEntity(entityType, modelName, modelHash)
+    if Spooner.previewModelHash == modelHash then
+        return
+    end
+
+    -- Clear existing preview if any, but keep the rotation
+    Spawner.ClearPreview(true, false)
+
+    -- Calculate preview distance based on model size
+    Script.QueueJob(function()
+        local modelSize = Spawner.GetModelSize(modelHash)
+        -- Set preview distance to 1.5x the model diagonal size, with min/max bounds
+        local previewDistance = math.max(5.0, math.min(modelSize * 1.5, 50.0))
+        Spooner.previewOffset = {x = 0, y = previewDistance, z = 0}
+
+
+        Spooner.previewEntityType = entityType
+        Spooner.previewModelName = modelName
+        Spooner.previewModelHash = modelHash
+    end)
 
     CustomLogger.Info("Selected " .. entityType .. ": " .. modelName .. " - Press Enter to spawn, Backspace to cancel")
 end
@@ -1066,9 +1140,8 @@ function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
     end
 
     if entity and entity ~= 0 then
-        -- Make it intangible and transparent
+        -- Make it intangible
         ENTITY.SET_ENTITY_COLLISION(entity, false, false)
-        ENTITY.SET_ENTITY_ALPHA(entity, 150, false)
         ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
         ENTITY.FREEZE_ENTITY_POSITION(entity, true)
 
@@ -1242,31 +1315,38 @@ function Spawner.ConfirmSpawn()
     Memory.Free(ptr)
     Spooner.previewEntity = nil
 
+    -- Store values for use in queued job
+    local spawnPos = {x = pos.x, y = pos.y, z = pos.z}
+    local spawnHeading = heading
+    local spawnModelHash = Spooner.previewModelHash
+    local spawnEntityType = Spooner.previewEntityType
+    local spawnModelName = Spooner.previewModelName
+
     -- Create actual entity
     Script.QueueJob(function()
-        if not Spawner.LoadModel(Spooner.previewModelHash) then return end
+        if not Spawner.LoadModel(spawnModelHash) then return end
 
         local entity = nil
 
-        if Spooner.previewEntityType == "prop" then
-            entity = OBJECT.CREATE_OBJECT(Spooner.previewModelHash, pos.x, pos.y, pos.z, true, true, false)
-        elseif Spooner.previewEntityType == "vehicle" then
-            entity = VEHICLE.CREATE_VEHICLE(Spooner.previewModelHash, pos.x, pos.y, pos.z, heading, true, true, false)
-        elseif Spooner.previewEntityType == "ped" then
-            entity = PED.CREATE_PED(26, Spooner.previewModelHash, pos.x, pos.y, pos.z, heading, true, true)
+        if spawnEntityType == "prop" then
+            entity = OBJECT.CREATE_OBJECT(spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, true, true, false)
+        elseif spawnEntityType == "vehicle" then
+            entity = VEHICLE.CREATE_VEHICLE(spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, spawnHeading, true, true, false)
+        elseif spawnEntityType == "ped" then
+            entity = PED.CREATE_PED(26, spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, spawnHeading, true, true)
         end
 
         if entity and entity ~= 0 then
-            ENTITY.SET_ENTITY_HEADING(entity, heading)
-            if Spooner.previewEntityType == "vehicle" then
-                VEHICLE.SET_VEHICLE_ON_GROUND_PROPERLY(entity, 0)
-            end
+            -- Position and orient the entity
+            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
+            ENTITY.SET_ENTITY_HEADING(entity, spawnHeading)
+
             NetworkUtils.MakeEntityNetworked(entity)
             table.insert(Spooner.managedEntities, entity)
-            CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
+            CustomLogger.Info("Spawned " .. spawnEntityType .. ": " .. spawnModelName)
         end
 
-        STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(Spooner.previewModelHash)
+        STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(spawnModelHash)
     end)
 end
 
@@ -1517,7 +1597,6 @@ function DrawManager.GetEntityName(entity)
     end
 
     local modelHash = ENTITY.GET_ENTITY_MODEL(entity)
-    local modelName = GTA.GetModelNameFromHash(modelHash)
 
     if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
         -- Get the display name (like "Adder" instead of "adder")
@@ -1526,34 +1605,17 @@ function DrawManager.GetEntityName(entity)
         if displayName and displayName ~= "" and displayName ~= "NULL" then
             return displayName .. " [" .. plate .. "]"
         end
-        return modelName .. " [" .. plate .. "]"
-    elseif ENTITY.IS_ENTITY_A_PED(entity) then
-        -- Try to find ped name from our loaded list
-        for categoryName, peds in pairs(EntityLists.Peds) do
-            for _, ped in ipairs(peds) do
-                if Utils.Joaat(ped.name) == modelHash then
-                    if ped.caption and ped.caption ~= "" then
-                        return ped.caption
-                    end
-                    return ped.name
-                end
-            end
-        end
-        return modelName
-    elseif ENTITY.IS_ENTITY_AN_OBJECT(entity) then
-        -- Try to find prop name from our loaded list
-        for categoryName, props in pairs(EntityLists.Props) do
-            for _, prop in ipairs(props) do
-                local propHash = tonumber(prop.hash) or Utils.Joaat(prop.hash)
-                if propHash == modelHash then
-                    return prop.name
-                end
-            end
-        end
-        return modelName
+        return GTA.GetModelNameFromHash(modelHash) .. " [" .. plate .. "]"
     end
 
-    return modelName
+    -- Check cache first for peds and props
+    local cachedName = EntityLists.NameCache[modelHash]
+    if cachedName then
+        return cachedName
+    end
+
+    -- Fallback to model name
+    return GTA.GetModelNameFromHash(modelHash)
 end
 
 function DrawManager.Draw3DBox(entity)
