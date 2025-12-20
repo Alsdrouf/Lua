@@ -467,6 +467,7 @@ function NetworkUtils.MaintainNetworkControl(entity)
     if not NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity) then
         return NetworkUtils.MakeEntityNetworked(entity)
     end
+    
     local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
     if not NETWORK.NETWORK_HAS_CONTROL_OF_NETWORK_ID(netId) then
         NETWORK.NETWORK_REQUEST_CONTROL_OF_NETWORK_ID(netId)
@@ -717,9 +718,7 @@ Spooner.previewEntity = nil
 Spooner.previewModelHash = nil
 Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
-Spooner.previewRotation = 0.0
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
-Spooner.previewOffset = {x = 0, y = 10.0, z = 0}  -- Offset from camera (like grab system)
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MakeEntityNetworked(entity)
@@ -831,18 +830,18 @@ function Spooner.StartGrabbing()
 end
 
 function Spooner.UpdateGrabbedEntity()
-    if not Spooner.isGrabbing or not Spooner.grabbedEntity then
+    if not Spooner.previewEntity and (not Spooner.isGrabbing or not Spooner.grabbedEntity) then
         return
     end
+
+    local entity = Spooner.grabbedEntity or Spooner.previewEntity
 
     Spooner.isEntityTargeted = true
 
-    if not ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
+    if not ENTITY.DOES_ENTITY_EXIST(entity) then
         Spooner.ReleaseEntity()
         return
     end
-
-    Spooner.TakeControlOfEntity(Spooner.grabbedEntity)
 
     local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
     local fwd, right, up, camRot = CameraUtils.GetBasis(Spooner.freecam)
@@ -881,12 +880,12 @@ function Spooner.UpdateGrabbedEntity()
     local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.grabOffsets)
 
     -- Apply clip to ground if enabled
-    newPos = Spooner.ClipEntityToGround(Spooner.grabbedEntity, newPos)
+    newPos = Spooner.ClipEntityToGround(entity, newPos)
 
-    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.grabbedEntity, newPos.x, newPos.y, newPos.z, false, false, false)
+    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, newPos.x, newPos.y, newPos.z, false, false, false)
 
     ENTITY.SET_ENTITY_ROTATION(
-        Spooner.grabbedEntity,
+        entity,
         Spooner.grabbedEntityRotation.x,
         Spooner.grabbedEntityRotation.y,
         Spooner.grabbedEntityRotation.z,
@@ -939,14 +938,9 @@ function Spooner.HandleEntityGrabbing()
         return
     end
 
-    -- Block grabbing while in preview mode
-    if Spooner.previewModelHash then
-        return
-    end
-
     local isRightClickPressed = Keybinds.Grab.IsPressed()
 
-    if not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen then
+    if not Spooner.previewModelHash and (not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen) then
         if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
             if not Spooner.isGrabbing then
                 Spooner.StartGrabbing()
@@ -1183,8 +1177,7 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
         local modelSize = Spawner.GetModelSize(modelHash)
         -- Set preview distance to 1.5x the model diagonal size, with min/max bounds
         local previewDistance = math.max(5.0, math.min(modelSize * 1.5, 50.0))
-        Spooner.previewOffset = {x = 0, y = previewDistance, z = 0}
-
+        Spooner.grabOffsets = {x = 0, y = previewDistance, z = 0}
 
         Spooner.previewEntityType = entityType
         Spooner.previewModelName = modelName
@@ -1219,11 +1212,11 @@ function Spawner.ClearPreview(keepRotation, keepOffset)
     Spooner.previewModelHash = nil
     Spooner.previewEntityType = nil
     Spooner.previewModelName = nil
-    if not keepRotation then
-        Spooner.previewRotation = 0.0
+    if not keepRotation or not Spooner.grabbedEntityRotation then
+        Spooner.grabbedEntityRotation = {x = 0, y = 0, z = 0}
     end
     if not keepOffset then
-        Spooner.previewOffset = {x = 0, y = 10.0, z = 0}
+        Spooner.grabOffsets = {x = 0, y = 10.0, z = 0}
     end
 end
 
@@ -1231,11 +1224,11 @@ function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
     local entity = nil
 
     if entityType == "prop" then
-        entity = OBJECT.CREATE_OBJECT(modelHash, pos.x, pos.y, pos.z, false, false, false)
+        entity = GTA.CreateObject(modelHash, pos.x, pos.y, pos.z, false, false)
     elseif entityType == "vehicle" then
-        entity = VEHICLE.CREATE_VEHICLE(modelHash, pos.x, pos.y, pos.z, 0.0, false, false, false)
+        entity = GTA.SpawnVehicle(modelHash, pos.x, pos.y, pos.z, 0.0, false, false)
     elseif entityType == "ped" then
-        entity = PED.CREATE_PED(26, modelHash, pos.x, pos.y, pos.z, 0.0, false, false)
+        entity = GTA.CreatePed(modelHash, 26, pos.x, pos.y, pos.z, 0.0, false, false)
     end
 
     if entity and entity ~= 0 then
@@ -1350,52 +1343,9 @@ function Spawner.UpdatePreview()
         return
     end
 
-    -- Get camera position and basis vectors (like grab system)
-    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
-    local fwd, right, up = CameraUtils.GetBasis(Spooner.freecam)
-
-    -- Calculate position using offset (like grabbed entity)
-    local newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.previewOffset)
-
     -- Create preview entity if needed
     if not Spooner.previewEntity or not ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        if not STREAMING.HAS_MODEL_LOADED(Spooner.previewModelHash) then
-            STREAMING.REQUEST_MODEL(Spooner.previewModelHash)
-            return
-        end
-        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, newPos)
-    end
-
-    if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-        -- Handle push/pull with scroll (like grab system)
-        local speedMultiplier = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or 1.0
-        local scrollSpeed = CONSTANTS.SCROLL_SPEED * speedMultiplier
-
-        if Keybinds.PushEntity.IsPressed() then
-            Spooner.previewOffset.y = math.max(Spooner.previewOffset.y - scrollSpeed, CONSTANTS.MIN_GRAB_DISTANCE)
-        elseif Keybinds.PullEntity.IsPressed() then
-            Spooner.previewOffset.y = Spooner.previewOffset.y + scrollSpeed
-        end
-
-        -- Handle rotation with Q/E keys
-        local rotSpeed = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or CONSTANTS.ROTATION_SPEED
-        if Keybinds.RotateRight.IsPressed() then
-            Spooner.previewRotation = Spooner.previewRotation - rotSpeed
-        elseif Keybinds.RotateLeft.IsPressed() then
-            Spooner.previewRotation = Spooner.previewRotation + rotSpeed
-        end
-
-        -- Recalculate position after potential offset changes
-        newPos = Spooner.CalculateNewPosition(camPos, fwd, right, up, Spooner.previewOffset)
-
-        -- Apply clip to ground if enabled
-        if Spooner.clipToGround then
-            newPos = Spooner.ClipEntityToGround(Spooner.previewEntity, newPos)
-        end
-
-        -- Update position and rotation
-        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(Spooner.previewEntity, newPos.x, newPos.y, newPos.z, false, false, false)
-        ENTITY.SET_ENTITY_HEADING(Spooner.previewEntity, Spooner.previewRotation)
+        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
     end
 end
 
@@ -1404,48 +1354,19 @@ function Spawner.ConfirmSpawn()
         return
     end
 
-    local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
-    local heading = ENTITY.GET_ENTITY_HEADING(Spooner.previewEntity)
-
-    -- Delete preview using pointer
-    local ptr = Memory.AllocInt()
-    Memory.WriteInt(ptr, Spooner.previewEntity)
-    ENTITY.DELETE_ENTITY(ptr)
-    Memory.Free(ptr)
-    Spooner.previewEntity = nil
-
-    -- Store values for use in queued job
-    local spawnPos = {x = pos.x, y = pos.y, z = pos.z}
-    local spawnHeading = heading
-    local spawnModelHash = Spooner.previewModelHash
-    local spawnEntityType = Spooner.previewEntityType
-    local spawnModelName = Spooner.previewModelName
-
     -- Create actual entity
     Script.QueueJob(function()
-        if not Spawner.LoadModel(spawnModelHash) then return end
-
-        local entity = nil
-
-        if spawnEntityType == "prop" then
-            entity = OBJECT.CREATE_OBJECT(spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, true, true, false)
-        elseif spawnEntityType == "vehicle" then
-            entity = VEHICLE.CREATE_VEHICLE(spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, spawnHeading, true, true, false)
-        elseif spawnEntityType == "ped" then
-            entity = PED.CREATE_PED(26, spawnModelHash, spawnPos.x, spawnPos.y, spawnPos.z, spawnHeading, true, true)
+        -- Remove status
+        ENTITY.SET_ENTITY_COLLISION(Spooner.previewEntity, true, true)
+        ENTITY.SET_ENTITY_INVINCIBLE(Spooner.previewEntity, false)
+        if Spooner.previewEntityType ~= "prop" then
+            ENTITY.FREEZE_ENTITY_POSITION(Spooner.previewEntity, false)
+            ENTITY.SET_ENTITY_VELOCITY(Spooner.previewEntity, 0, 0 ,-1)
         end
-
-        if entity and entity ~= 0 then
-            -- Position and orient the entity
-            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
-            ENTITY.SET_ENTITY_HEADING(entity, spawnHeading)
-
-            NetworkUtils.MakeEntityNetworked(entity)
-            table.insert(Spooner.managedEntities, entity)
-            CustomLogger.Info("Spawned " .. spawnEntityType .. ": " .. spawnModelName)
-        end
-
-        STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(spawnModelHash)
+        NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
+        table.insert(Spooner.managedEntities, Spooner.previewEntity)
+        CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
+        Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
     end)
 end
 
@@ -1588,114 +1509,85 @@ function DrawManager.DrawInstructionalButtons()
 
     local buttonIndex = 0
 
-    -- In preview mode, only show preview-related keybinds
+    -- In preview mode
     if Spooner.previewModelHash then
         DrawManager.AddInstructionalButton(buttonIndex, Keybinds.ConfirmSpawn.string, "Spawn Entity")
         buttonIndex = buttonIndex + 1
 
         DrawManager.AddInstructionalButton(buttonIndex, Keybinds.CancelSpawn.string, "Cancel")
         buttonIndex = buttonIndex + 1
+    end
 
+    -- Normal mode keybinds
+    if not Spooner.previewEntity then
+        local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
+        buttonIndex = buttonIndex + 1
+    end
+
+    if Spooner.isGrabbing or Spooner.previewEntity then
         DrawManager.AddInstructionalButtonMulti(
             buttonIndex,
             {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
-            "Rotate Preview"
+            "Yaw"
+        )
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.PitchUp.string, Keybinds.PitchDown.string},
+            "Pitch"
+        )
+        buttonIndex = buttonIndex + 1
+
+        DrawManager.AddInstructionalButtonMulti(
+            buttonIndex,
+            {Keybinds.RollLeft.string, Keybinds.RollRight.string},
+            "Roll"
         )
         buttonIndex = buttonIndex + 1
 
         DrawManager.AddInstructionalButtonMulti(
             buttonIndex,
             {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
-            "Push / Pull Preview"
-        )
-        buttonIndex = buttonIndex + 1
-
-        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
-        buttonIndex = buttonIndex + 1
-
-        DrawManager.AddInstructionalButtonMulti(
-            buttonIndex,
-            {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
-            "Up / Down"
-        )
-        buttonIndex = buttonIndex + 1
-
-        DrawManager.AddInstructionalButtonMulti(
-            buttonIndex,
-            {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
-            "Move Camera"
-        )
-        buttonIndex = buttonIndex + 1
-    else
-        -- Normal mode keybinds
-        local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
-        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
-        buttonIndex = buttonIndex + 1
-
-        if Spooner.isGrabbing then
-            DrawManager.AddInstructionalButtonMulti(
-                buttonIndex,
-                {Keybinds.RotateLeft.string, Keybinds.RotateRight.string},
-                "Yaw"
-            )
-            buttonIndex = buttonIndex + 1
-
-            DrawManager.AddInstructionalButtonMulti(
-                buttonIndex,
-                {Keybinds.PitchUp.string, Keybinds.PitchDown.string},
-                "Pitch"
-            )
-            buttonIndex = buttonIndex + 1
-
-            DrawManager.AddInstructionalButtonMulti(
-                buttonIndex,
-                {Keybinds.RollLeft.string, Keybinds.RollRight.string},
-                "Roll"
-            )
-            buttonIndex = buttonIndex + 1
-
-            DrawManager.AddInstructionalButtonMulti(
-                buttonIndex,
-                {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
-                "Push / Pull Entity"
-            )
-            buttonIndex = buttonIndex + 1
-        end
-
-        local entityToCheck = Spooner.isGrabbing and Spooner.grabbedEntity or
-                              (Spooner.isEntityTargeted and Spooner.targetedEntity or nil)
-
-        if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
-            local isManaged = false
-            for _, e in ipairs(Spooner.managedEntities) do
-                if e == entityToCheck then
-                    isManaged = true
-                    break
-                end
-            end
-
-            local listLabel = isManaged and "Remove from List" or "Add to List"
-            DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
-            buttonIndex = buttonIndex + 1
-        end
-
-        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
-        buttonIndex = buttonIndex + 1
-
-        DrawManager.AddInstructionalButtonMulti(
-            buttonIndex,
-            {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
-            "Up / Down"
-        )
-        buttonIndex = buttonIndex + 1
-
-        DrawManager.AddInstructionalButtonMulti(
-            buttonIndex,
-            {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
-            "Move Camera"
+            "Push / Pull Entity"
         )
         buttonIndex = buttonIndex + 1
     end
+
+    local entityToCheck = not Spooner.previewEntity and (Spooner.isGrabbing and Spooner.grabbedEntity or
+                            (Spooner.isEntityTargeted and Spooner.targetedEntity or nil))
+
+    if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
+        local isManaged = false
+        for _, e in ipairs(Spooner.managedEntities) do
+            if e == entityToCheck then
+                isManaged = true
+                break
+            end
+        end
+
+        local listLabel = isManaged and "Remove from List" or "Add to List"
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
+        buttonIndex = buttonIndex + 1
+    end
+
+    DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
+    buttonIndex = buttonIndex + 1
+
+    DrawManager.AddInstructionalButtonMulti(
+        buttonIndex,
+        {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
+        "Up / Down"
+    )
+    buttonIndex = buttonIndex + 1
+
+    DrawManager.AddInstructionalButtonMulti(
+        buttonIndex,
+        {Keybinds.MoveRight.string, Keybinds.MoveLeft.string, Keybinds.MoveBackward.string, Keybinds.MoveForward.string},
+        "Move Camera"
+    )
+    buttonIndex = buttonIndex + 1
 
     GRAPHICS.BEGIN_SCALEFORM_MOVIE_METHOD(Spooner.scaleform, "DRAW_INSTRUCTIONAL_BUTTONS")
     GRAPHICS.SCALEFORM_MOVIE_METHOD_ADD_PARAM_INT(-1)
@@ -2451,11 +2343,31 @@ end)
 Script.RegisterLooped(function()
     if Spooner.inSpoonerMode then
         Script.QueueJob(function()
-            Spooner.ManageEntities()
             Spooner.HandleEntityGrabbing()
             DrawManager.DrawTargetedEntityBox()
         end)
     end
+end)
+
+Script.RegisterLooped(function()
+    if Spooner.grabbedEntity then
+        NetworkUtils.MaintainNetworkControl(Spooner.grabbedEntity)
+    end
+end)
+
+Script.RegisterLooped(function()
+    Script.QueueJob(function() 
+        if Spooner.targetedEntity and not Spooner.grabbedEntity then
+            NetworkUtils.MaintainNetworkControl(Spooner.targetedEntity)
+        end
+    end)
+end)
+
+Script.RegisterLooped(function()
+    Script.QueueJob(function() 
+        Spooner.ManageEntities()
+    end)
+
 end)
 
 EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
