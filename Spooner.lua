@@ -784,26 +784,56 @@ function Spooner.ClipEntityToGround(entity, newPos)
     end
 
     -- Get ground Z at the entity's position
-    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z + 100)
+    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z + 300)
 
     if groundZ then
-        -- Get entity model dimensions to calculate the bottom of the entity
+        -- Get entity model dimensions
         local min = Memory.Alloc(24)
         local max = Memory.Alloc(24)
         MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
 
-        local minZ = Memory.ReadFloat(min + 16)  -- Read with proper Vector3 stride
+        local minX = Memory.ReadFloat(min)
+        local minY = Memory.ReadFloat(min + 8)
+        local minZ = Memory.ReadFloat(min + 16)
+        local maxX = Memory.ReadFloat(max)
+        local maxY = Memory.ReadFloat(max + 8)
+        local maxZ = Memory.ReadFloat(max + 16)
 
         Memory.Free(min)
         Memory.Free(max)
 
-        -- Calculate distance from entity bottom to ground
-        local entityBottomZ = newPos.z + minZ
-        local distanceToGround = entityBottomZ - groundZ
+        -- Apply pending rotation first so GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS works correctly
+        local rot = Spooner.grabbedEntityRotation or ENTITY.GET_ENTITY_ROTATION(entity, 2)
+        ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, rot.z, 2, true)
+
+        -- Define the 8 corners of the bounding box (same as Draw3DBox)
+        local corners = {
+            {minX, minY, minZ}, {maxX, minY, minZ},
+            {maxX, maxY, minZ}, {minX, maxY, minZ},
+            {minX, minY, maxZ}, {maxX, minY, maxZ},
+            {maxX, maxY, maxZ}, {minX, maxY, maxZ}
+        }
+
+        -- Find the lowest world Z using the game's transformation
+        local lowestWorldZ = math.huge
+        for _, corner in ipairs(corners) do
+            local worldPos = ENTITY.GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS(entity, corner[1], corner[2], corner[3])
+            if worldPos.z < lowestWorldZ then
+                lowestWorldZ = worldPos.z
+            end
+        end
+
+        -- Calculate how far the lowest point is from the entity origin
+        local entityZ = ENTITY.GET_ENTITY_COORDS(entity, true).z
+        local lowestOffset = lowestWorldZ - entityZ
+
+        -- Calculate distance from lowest point to ground
+        local projectedLowestZ = newPos.z + lowestOffset
+        local distanceToGround = projectedLowestZ - groundZ
 
         -- If close enough to ground (above or below), snap to it
         if math.abs(distanceToGround) < CONSTANTS.CLIP_TO_GROUND_DISTANCE then
-            newPos.z = groundZ - minZ
+            newPos.z = groundZ - lowestOffset
         end
     end
 
