@@ -347,7 +347,6 @@ local function DownloadAndSaveLuaFile(url, filePath)
     curlObject:Perform()
 
     while not curlObject:GetFinished() do
-        Script.Yield(0)
     end
 
     local responseCode, responseString = curlObject:GetResponse()
