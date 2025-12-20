@@ -2367,7 +2367,6 @@ Script.RegisterLooped(function()
     Script.QueueJob(function() 
         Spooner.ManageEntities()
     end)
-
 end)
 
 EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
