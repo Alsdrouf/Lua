@@ -173,20 +173,9 @@ local function LoadConfig()
 
     local loadedConfig = XMLParser.ParseConfig(configData)
 
-    if loadedConfig.enableF9Key ~= nil then
-        Config.enableF9Key = loadedConfig.enableF9Key
-    end
-    if loadedConfig.throwableMode ~= nil then
-        Config.throwableMode = loadedConfig.throwableMode
-    end
-    if loadedConfig.clipToGround ~= nil then
-        Config.clipToGround = loadedConfig.clipToGround
-    end
-    if loadedConfig.positionStep ~= nil then
-        Config.positionStep = loadedConfig.positionStep
-    end
-
     CustomLogger.Info("Configuration loaded from XML")
+
+    return loadedConfig
 end
 
 -- ============================================================================
@@ -214,7 +203,6 @@ Spooner.isGrabbing = false
 Spooner.scaleform = nil
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
-Spooner.makeMissionEntity = false
 Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 Spooner.clipToGround = false
@@ -1226,7 +1214,6 @@ function DrawManager.ClickGUIInit()
     ClickGUI.AddTab(pluginName, function()
         if ClickGUI.BeginCustomChildWindow("Spooner") then
             ClickGUI.RenderFeature(Utils.Joaat("ToggleSpoonerMode"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_MakeMissionEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
@@ -1608,17 +1595,6 @@ local toggleSpoonerModeFeature = FeatureMgr.AddFeature(
     end
 )
 
-local makeMissionEntityFeature = FeatureMgr.AddFeature(
-    Utils.Joaat("Spooner_MakeMissionEntity"),
-    "Set as Mission Entity",
-    eFeatureType.Toggle,
-    "Automatically set entities as mission entities (Better networking)",
-    function(f)
-        Spooner.makeMissionEntity = f:IsToggled()
-    end
-)
-makeMissionEntityFeature:Toggle()
-
 FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_RemoveEntity"),
     "Remove from List",
@@ -1763,6 +1739,7 @@ local enableClipToGroundFeature = FeatureMgr.AddFeature(
     eFeatureType.Toggle,
     "Snap entities to ground when within " .. CONSTANTS.CLIP_TO_GROUND_DISTANCE .. "m",
     function(f)
+        Logger.LogInfo("clipToGround: " .. tostring(f:IsToggled()))
         Config.clipToGround = f:IsToggled()
         Spooner.clipToGround = Config.clipToGround
         SaveConfig()
@@ -1784,33 +1761,34 @@ local lockMovementWhileMenuIsOpenFeature = FeatureMgr.AddFeature(
 -- ============================================================================
 -- Initialization
 -- ============================================================================
--- Load configuration and restore settings
-LoadConfig()
+Script.QueueJob(function()
+    -- Load configuration and restore settings
+    local loadedConfig = LoadConfig()
+    if loadedConfig ~= nil and loadedConfig.positionStep ~= nil then
+        Config.positionStep = loadedConfig.positionStep
+    end
 
--- Restore F9 key setting
-if Config.enableF9Key then
-    enableF9KeyFeature:Toggle()
-end
+    -- Load entities
+    EntityLists.LoadAll(propListPath, vehicleListPath, pedListPath)
 
--- Restore throwable mode setting
-if Config.throwableMode then
-    enableThrowableModeFeature:Toggle()
-end
+    -- Init gui
+    DrawManager.ClickGUIInit()
 
--- Restore clip to ground setting
-if Config.clipToGround then
-    enableClipToGroundFeature:Toggle()
-end
-
--- Restore lock movement while menu is open setting
-if Config.lockMovementWhileMenuIsOpen then
-    lockMovementWhileMenuIsOpenFeature:Toggle()
-end
-
--- Load entities
-EntityLists.LoadAll(propListPath, vehicleListPath, pedListPath)
-
-DrawManager.ClickGUIInit()
+    if loadedConfig ~= nil then
+        if loadedConfig.enableF9Key ~= nil and loadedConfig.enableF9Key then
+            enableF9KeyFeature:Toggle(loadedConfig.enableF9Key)
+        end
+        if loadedConfig.clipToGround ~= nil and loadedConfig.clipToGround then
+            enableClipToGroundFeature:Toggle(loadedConfig.clipToGround)
+        end
+        if loadedConfig.throwableMode ~= nil and loadedConfig.throwableMode then
+            enableThrowableModeFeature:Toggle(loadedConfig.throwableMode)
+        end
+        if loadedConfig.lockMovementWhileMenuIsOpen ~= nil and loadedConfig.lockMovementWhileMenuIsOpen then
+            lockMovementWhileMenuIsOpenFeature:Toggle(loadedConfig.lockMovementWhileMenuIsOpen)
+        end
+    end
+end)
 
 -- Thread for movement and action
 Script.RegisterLooped(function()
