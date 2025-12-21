@@ -2,13 +2,37 @@ local pluginName = "Spooner"
 local menuRootPath = FileMgr.GetMenuRootPath() .. "\\Lua\\" .. pluginName
 local nativesPath = menuRootPath .. "\\Assets\\natives.lua"
 local configPath = menuRootPath .. "\\config.xml"
+local libsPath = menuRootPath .. "\\libs\\"
 
 FileMgr.CreateDir(menuRootPath)
 FileMgr.CreateDir(menuRootPath .. "\\Assets")
+FileMgr.CreateDir(menuRootPath .. "\\libs")
 
 local propListPath = menuRootPath .. "\\Assets\\PropList.xml"
 local vehicleListPath = menuRootPath .. "\\Assets\\VehicleList.xml"
 local pedListPath = menuRootPath .. "\\Assets\\PedList.xml"
+
+-- ============================================================================
+-- Load Libraries
+-- ============================================================================
+local function LoadLib(name)
+    local path = libsPath .. name .. ".lua"
+    local status, result = pcall(dofile, path)
+    if not status then
+        Logger.Log(eLogColor.RED, pluginName, "Failed to load library " .. name .. ": " .. tostring(result))
+        return nil
+    end
+    return result
+end
+
+local LoggerLib = LoadLib("Logger")
+local XMLParser = LoadLib("XMLParser")
+local EntityListsLib = LoadLib("EntityLists")
+local NetworkUtilsLib = LoadLib("NetworkUtils")
+local KeybindsLib = LoadLib("Keybinds")
+local CameraUtilsLib = LoadLib("CameraUtils")
+local MemoryUtilsLib = LoadLib("MemoryUtils")
+local RaycastLib = LoadLib("Raycast")
 
 -- ============================================================================
 -- Constants
@@ -35,307 +59,10 @@ local CONSTANTS = {
 }
 
 -- ============================================================================
--- Custom Logger
+-- Initialize Libraries (before natives)
 -- ============================================================================
-local CustomLogger = {}
-
-function CustomLogger.Info(str)
-    Logger.Log(eLogColor.WHITE, pluginName, str)
-end
-
-function CustomLogger.Warn(str)
-    Logger.Log(eLogColor.YELLOW, pluginName, str)
-end
-
-function CustomLogger.Error(str)
-    Logger.Log(eLogColor.RED, pluginName, str)
-end
-
--- ============================================================================
--- XML Parser
--- ============================================================================
-local XMLParser = {}
-
-function XMLParser.ParseAttributes(tag)
-    local attrs = {}
-    for name, value in string.gmatch(tag, '(%w+)="([^"]*)"') do
-        attrs[name] = value
-    end
-    return attrs
-end
-
-function XMLParser.Parse(xmlString)
-    -- Remove XML declaration and comments
-    xmlString = xmlString:gsub("<%?[^?]*%?>", "")
-    xmlString = xmlString:gsub("<!%-%-.-%-%->" , "")
-
-    local result = {}
-    local stack = {result}
-    local current = result
-
-    for closing, tagName, attrs, selfClosing in string.gmatch(xmlString, "<(/?)([%w_]+)(.-)%s*(/?)>") do
-        if closing == "/" then
-            table.remove(stack)
-            current = stack[#stack]
-        else
-            local node = {
-                tag = tagName,
-                attributes = XMLParser.ParseAttributes(attrs),
-                children = {}
-            }
-
-            if not current.children then
-                current.children = {}
-            end
-            table.insert(current.children, node)
-
-            if selfClosing ~= "/" then
-                table.insert(stack, node)
-                current = node
-            end
-        end
-    end
-
-    return result.children or {}
-end
-
-function XMLParser.EscapeAttribute(str)
-    if type(str) ~= "string" then
-        str = tostring(str)
-    end
-    str = str:gsub("&", "&amp;")
-    str = str:gsub("<", "&lt;")
-    str = str:gsub(">", "&gt;")
-    str = str:gsub('"', "&quot;")
-    str = str:gsub("'", "&apos;")
-    return str
-end
-
-function XMLParser.GenerateXML(rootTag, options)
-    local lines = {}
-    table.insert(lines, '<?xml version="1.0" encoding="UTF-8"?>')
-    table.insert(lines, '<' .. rootTag .. '>')
-
-    for key, value in pairs(options) do
-        local escapedValue = XMLParser.EscapeAttribute(value)
-        table.insert(lines, '    <Option name="' .. key .. '" value="' .. escapedValue .. '" />')
-    end
-
-    table.insert(lines, '</' .. rootTag .. '>')
-    return table.concat(lines, '\n')
-end
-
-function XMLParser.ParseConfig(xmlString)
-    local config = {}
-    local parsed = XMLParser.Parse(xmlString)
-
-    for _, node in ipairs(parsed) do
-        if node.tag == "SpoonerConfig" then
-            for _, optionNode in ipairs(node.children or {}) do
-                if optionNode.tag == "Option" then
-                    local name = optionNode.attributes.name
-                    local value = optionNode.attributes.value
-                    if name and value then
-                        -- Convert string values to appropriate types
-                        if value == "true" then
-                            config[name] = true
-                        elseif value == "false" then
-                            config[name] = false
-                        elseif tonumber(value) then
-                            config[name] = tonumber(value)
-                        else
-                            config[name] = value
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return config
-end
-
--- ============================================================================
--- Entity Lists (Props, Vehicles, Peds)
--- ============================================================================
-local EntityLists = {
-    Props = {},      -- { [categoryName] = { {name, hash}, ... } }
-    Vehicles = {},   -- { [categoryName] = { {name}, ... } }
-    Peds = {},       -- { [categoryName] = { {name, caption}, ... } }
-    -- Filter states for each tab
-    PropFilter = "",
-    VehicleFilter = "",
-    PedFilter = "",
-    -- Cache for model hash to name lookups
-    NameCache = {}   -- { [modelHash] = displayName }
-}
-
-function EntityLists.LoadPropList(filePath)
-    if not FileMgr.DoesFileExist(filePath) then
-        CustomLogger.Warn("PropList.xml not found at: " .. filePath)
-        return false
-    end
-
-    local content = FileMgr.ReadFileContent(filePath)
-    if not content or content == "" then
-        CustomLogger.Error("Failed to read PropList.xml")
-        return false
-    end
-
-    EntityLists.Props = {}
-    local parsed = XMLParser.Parse(content)
-
-    for _, node in ipairs(parsed) do
-        if node.tag == "PropList" then
-            for _, categoryNode in ipairs(node.children or {}) do
-                if categoryNode.tag == "Category" then
-                    local categoryName = categoryNode.attributes.name or "Unknown"
-                    EntityLists.Props[categoryName] = {}
-
-                    for _, propNode in ipairs(categoryNode.children or {}) do
-                        if propNode.tag == "Prop" then
-                            table.insert(EntityLists.Props[categoryName], {
-                                name = propNode.attributes.name or "",
-                                hash = propNode.attributes.hash or ""
-                            })
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local categoryCount = 0
-    local propCount = 0
-    for _, props in pairs(EntityLists.Props) do
-        categoryCount = categoryCount + 1
-        propCount = propCount + #props
-    end
-
-    CustomLogger.Info("Loaded PropList: " .. categoryCount .. " categories, " .. propCount .. " props")
-    return true
-end
-
-function EntityLists.LoadVehicleList(filePath)
-    if not FileMgr.DoesFileExist(filePath) then
-        CustomLogger.Warn("VehicleList.xml not found at: " .. filePath)
-        return false
-    end
-
-    local content = FileMgr.ReadFileContent(filePath)
-    if not content or content == "" then
-        CustomLogger.Error("Failed to read VehicleList.xml")
-        return false
-    end
-
-    EntityLists.Vehicles = {}
-    local parsed = XMLParser.Parse(content)
-
-    for _, node in ipairs(parsed) do
-        if node.tag == "VehicleList" then
-            for _, categoryNode in ipairs(node.children or {}) do
-                if categoryNode.tag == "Category" then
-                    local categoryName = categoryNode.attributes.name or "Unknown"
-                    EntityLists.Vehicles[categoryName] = {}
-
-                    for _, vehicleNode in ipairs(categoryNode.children or {}) do
-                        if vehicleNode.tag == "Vehicle" then
-                            table.insert(EntityLists.Vehicles[categoryName], {
-                                name = vehicleNode.attributes.name or ""
-                            })
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local categoryCount = 0
-    local vehicleCount = 0
-    for _, vehicles in pairs(EntityLists.Vehicles) do
-        categoryCount = categoryCount + 1
-        vehicleCount = vehicleCount + #vehicles
-    end
-
-    CustomLogger.Info("Loaded VehicleList: " .. categoryCount .. " categories, " .. vehicleCount .. " vehicles")
-    return true
-end
-
-function EntityLists.LoadPedList(filePath)
-    if not FileMgr.DoesFileExist(filePath) then
-        CustomLogger.Warn("PedList.xml not found at: " .. filePath)
-        return false
-    end
-
-    local content = FileMgr.ReadFileContent(filePath)
-    if not content or content == "" then
-        CustomLogger.Error("Failed to read PedList.xml")
-        return false
-    end
-
-    EntityLists.Peds = {}
-    local parsed = XMLParser.Parse(content)
-
-    for _, node in ipairs(parsed) do
-        if node.tag == "PedList" then
-            for _, categoryNode in ipairs(node.children or {}) do
-                if categoryNode.tag == "Category" then
-                    local categoryName = categoryNode.attributes.name or "Unknown"
-                    EntityLists.Peds[categoryName] = {}
-
-                    for _, pedNode in ipairs(categoryNode.children or {}) do
-                        if pedNode.tag == "Ped" then
-                            table.insert(EntityLists.Peds[categoryName], {
-                                name = pedNode.attributes.name or "",
-                                caption = pedNode.attributes.caption or ""
-                            })
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local categoryCount = 0
-    local pedCount = 0
-    for _, peds in pairs(EntityLists.Peds) do
-        categoryCount = categoryCount + 1
-        pedCount = pedCount + #peds
-    end
-
-    CustomLogger.Info("Loaded PedList: " .. categoryCount .. " categories, " .. pedCount .. " peds")
-    return true
-end
-
-function EntityLists.BuildNameCache()
-    EntityLists.NameCache = {}
-
-    -- Cache prop names by hash (use sJoaat for signed hash to match ENTITY.GET_ENTITY_MODEL)
-    for _, props in pairs(EntityLists.Props) do
-        for _, prop in ipairs(props) do
-                local hash = Utils.sJoaat(prop.hash)
-                EntityLists.NameCache[hash] = prop.name
-            end
-        end
-
-    -- Cache ped names by hash (use sJoaat for signed hash to match ENTITY.GET_ENTITY_MODEL)
-    for _, peds in pairs(EntityLists.Peds) do
-        for _, ped in ipairs(peds) do
-            local hash = Utils.sJoaat(ped.name)
-                        local displayName = (ped.caption and ped.caption ~= "") and ped.caption or ped.name
-            EntityLists.NameCache[hash] = displayName
-        end
-    end
-
-    CustomLogger.Info("Built name cache with " .. tostring(#EntityLists.NameCache) .. " entries")
-end
-
-function EntityLists.LoadAll()
-    EntityLists.LoadPropList(propListPath)
-    EntityLists.LoadVehicleList(vehicleListPath)
-    EntityLists.LoadPedList(pedListPath)
-    EntityLists.BuildNameCache()
-end
+local CustomLogger = LoggerLib.New(pluginName)
+local MemoryUtils = MemoryUtilsLib.New()
 
 -- ============================================================================
 -- Utilities
@@ -392,139 +119,14 @@ end
 LoadNatives(nativesPath)
 
 -- ============================================================================
--- Network Utilities (Credits to themilkman554)
+-- Initialize Libraries (after natives)
 -- ============================================================================
-local NetworkUtils = {}
-
-function NetworkUtils.SetEntityAsNetworked(entity, timeout)
-    local time = Time.GetEpocheMs() + (timeout or CONSTANTS.NETWORK_TIMEOUT)
-    while time > Time.GetEpocheMs() and not NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity) do
-        NETWORK.NETWORK_REGISTER_ENTITY_AS_NETWORKED(entity)
-        Script.Yield(0)
-    end
-    return NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
-end
-
-function NetworkUtils.ConstantizeNetworkId(entity)
-    local netId = NetworkUtils.SetEntityAsNetworked(entity, CONSTANTS.NETWORK_TIMEOUT_SHORT)
-    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, true)
-    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), true)
-    return netId
-end
-
--- Save ped task state before mission entity conversion
-function NetworkUtils.SavePedTaskState(ped)
-    if not ENTITY.IS_ENTITY_A_PED(ped) then
-        return nil
-    end
-
-    local state = {
-        isWandering = TASK.GET_IS_TASK_ACTIVE(ped, 224),  -- TASK_WANDER
-        isWalking = TASK.IS_PED_WALKING(ped),
-        isRunning = TASK.IS_PED_RUNNING(ped),
-        isSprinting = TASK.IS_PED_SPRINTING(ped),
-        isStill = TASK.IS_PED_STILL(ped),
-    }
-
-    return state
-end
-
--- Restore ped task after mission entity conversion
-function NetworkUtils.RestorePedTaskState(ped, state)
-    if not state or not ENTITY.IS_ENTITY_A_PED(ped) then
-        return
-    end
-
-    -- If ped was moving around, give them wander task
-    if state.isWandering or state.isWalking or state.isRunning or state.isSprinting then
-        TASK.TASK_WANDER_STANDARD(ped, 10.0, 10)
-    end
-    -- If they were standing still, mission entity default behavior is fine
-end
-
-function NetworkUtils.MakeEntityNetworked(entity)
-    if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
-        ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
-    end
-
-    -- Skip network functions in singleplayer
-    local netId = 0
-    if NETWORK.NETWORK_IS_SESSION_STARTED() then
-        netId = NetworkUtils.ConstantizeNetworkId(entity)
-        NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false)
-    end
-
-    return netId
-end
-
--- Lighter version that just maintains network control without resetting ped tasks
-function NetworkUtils.MaintainNetworkControl(entity)
-    -- Skip network functions in singleplayer
-    if not NETWORK.NETWORK_IS_SESSION_STARTED() then
-        return 0
-    end
-
-    if not NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity) then
-        return NetworkUtils.MakeEntityNetworked(entity)
-    end
-    
-    local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
-    if not NETWORK.NETWORK_HAS_CONTROL_OF_NETWORK_ID(netId) then
-        NETWORK.NETWORK_REQUEST_CONTROL_OF_NETWORK_ID(netId)
-    end
-    return netId
-end
-
--- ============================================================================
--- Keybinds
--- ============================================================================
-local Keybinds = {}
-
-function Keybinds.GetAsString(key)
-    return PAD.GET_CONTROL_INSTRUCTIONAL_BUTTONS_STRING(0, key, true)
-end
-
-function Keybinds.CreateKeybind(key, func)
-    return {
-        key = key,
-        string = Keybinds.GetAsString(key),
-        IsPressed = function()
-            return func(key)
-        end
-    }
-end
-
-function Keybinds.IsPressed(key)
-    return PAD.IS_DISABLED_CONTROL_PRESSED(0, key)
-end
-
-function Keybinds.IsJustPressed(key)
-    return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(0, key)
-end
-
-function Keybinds.GetControlNormal(key)
-    return PAD.GET_DISABLED_CONTROL_NORMAL(0, key)
-end
-
-Keybinds.Grab = Keybinds.CreateKeybind(24, Keybinds.IsPressed)
-Keybinds.AddOrRemoveFromList = Keybinds.CreateKeybind(73, Keybinds.IsJustPressed)
-Keybinds.MoveFaster = Keybinds.CreateKeybind(21, Keybinds.IsPressed)
-Keybinds.RotateLeft = Keybinds.CreateKeybind(44, Keybinds.IsPressed)
-Keybinds.RotateRight = Keybinds.CreateKeybind(38, Keybinds.IsPressed)
-Keybinds.PitchUp = Keybinds.CreateKeybind(172, Keybinds.IsPressed)    -- Arrow Up
-Keybinds.PitchDown = Keybinds.CreateKeybind(173, Keybinds.IsPressed)  -- Arrow Down
-Keybinds.RollLeft = Keybinds.CreateKeybind(174, Keybinds.IsPressed)   -- Arrow Left
-Keybinds.RollRight = Keybinds.CreateKeybind(175, Keybinds.IsPressed)  -- Arrow Right
-Keybinds.PushEntity = Keybinds.CreateKeybind(14, Keybinds.IsPressed)
-Keybinds.PullEntity = Keybinds.CreateKeybind(15, Keybinds.IsPressed)
-Keybinds.MoveUp = Keybinds.CreateKeybind(22, Keybinds.GetControlNormal)
-Keybinds.MoveDown = Keybinds.CreateKeybind(36, Keybinds.GetControlNormal)
-Keybinds.MoveForward = Keybinds.CreateKeybind(32, Keybinds.GetControlNormal)
-Keybinds.MoveBackward = Keybinds.CreateKeybind(33, Keybinds.GetControlNormal)
-Keybinds.MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal)
-Keybinds.MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal)
-Keybinds.ConfirmSpawn = Keybinds.CreateKeybind(201, Keybinds.IsJustPressed)  -- Enter key
-Keybinds.CancelSpawn = Keybinds.CreateKeybind(202, Keybinds.IsJustPressed)   -- Backspace key
+local EntityLists = EntityListsLib.New(XMLParser, CustomLogger)
+local NetworkUtils = NetworkUtilsLib.New(CONSTANTS)
+local KeybindsInstance = KeybindsLib.New(PAD)
+local Keybinds = KeybindsInstance.SetupDefaultBinds()
+local CameraUtils = CameraUtilsLib.New(CONSTANTS)
+local Raycast = RaycastLib.New(CONSTANTS, MemoryUtils)
 
 -- ============================================================================
 -- Configuration Management
@@ -586,101 +188,6 @@ local function LoadConfig()
 end
 
 -- ============================================================================
--- Camera Utilities
--- ============================================================================
-local CameraUtils = {}
-
-function CameraUtils.GetBasis(cam)
-    local rot = CAM.GET_CAM_ROT(cam, 2)
-    local radZ = math.rad(rot.z)
-    local radX = math.rad(rot.x)
-
-    local fwd = {
-        x = -math.sin(radZ) * math.cos(radX),
-        y = math.cos(radZ) * math.cos(radX),
-        z = math.sin(radX)
-    }
-
-    local right = {
-        x = math.cos(radZ),
-        y = math.sin(radZ),
-        z = 0.0
-    }
-
-    local up = {
-        x = right.y * fwd.z - right.z * fwd.y,
-        y = right.z * fwd.x - right.x * fwd.z,
-        z = right.x * fwd.y - right.y * fwd.x
-    }
-
-    return fwd, right, up, rot
-end
-
-function CameraUtils.ClampPitch(pitch)
-    if pitch > CONSTANTS.PITCH_CLAMP_MAX then
-        return CONSTANTS.PITCH_CLAMP_MAX
-    elseif pitch < CONSTANTS.PITCH_CLAMP_MIN then
-        return CONSTANTS.PITCH_CLAMP_MIN
-    end
-    return pitch
-end
-
--- ============================================================================
--- Memory Management Utilities
--- ============================================================================
-local MemoryUtils = {}
-
-function MemoryUtils.PerformRaycast(startX, startY, startZ, endX, endY, endZ, flags)
-    local hit = Memory.AllocInt()
-    local endCoords = Memory.Alloc(24)
-    local surfaceNormal = Memory.Alloc(24)
-    local entityHit = Memory.AllocInt()
-
-    local handle = SHAPETEST.START_SHAPE_TEST_LOS_PROBE(
-        startX, startY, startZ,
-        endX, endY, endZ,
-        flags,
-        nil,
-        7
-    )
-
-    local result = {
-        handle = handle,
-        hit = hit,
-        endCoords = endCoords,
-        surfaceNormal = surfaceNormal,
-        entityHit = entityHit
-    }
-
-    return result
-end
-
-function MemoryUtils.GetRaycastResult(raycastData)
-    local resultReady = SHAPETEST.GET_SHAPE_TEST_RESULT(
-        raycastData.handle,
-        raycastData.hit,
-        raycastData.endCoords,
-        raycastData.surfaceNormal,
-        raycastData.entityHit
-    )
-
-    if resultReady == 2 then
-        local hitValue = Memory.ReadInt(raycastData.hit)
-        local entityHitValue = Memory.ReadInt(raycastData.entityHit)
-        return true, hitValue, entityHitValue
-    end
-
-    return false, nil, nil
-end
-
-function MemoryUtils.FreeRaycastData(raycastData)
-    Memory.Free(raycastData.hit)
-    Memory.Free(raycastData.endCoords)
-    Memory.Free(raycastData.surfaceNormal)
-    Memory.Free(raycastData.entityHit)
-end
-
--- ============================================================================
 -- Spooner Core
 -- ============================================================================
 local Spooner = {}
@@ -697,9 +204,6 @@ Spooner.crosshairColorGreen = {r = 0, g = 255, b = 0, a = 255}
 Spooner.lastEntityPos = nil
 Spooner.grabVelocity = {x = 0, y = 0, z = 0}
 Spooner.targetedEntity = nil
-Spooner.raycastHandle = nil
-Spooner.raycastData = nil
-Spooner.raycastFrameCounter = 0
 Spooner.isEntityTargeted = false
 Spooner.grabbedEntity = nil
 Spooner.grabOffsets = nil
@@ -766,7 +270,7 @@ function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
 end
 
 function Spooner.GetGroundZAtPosition(x, y, z)
-    local groundZ = Memory.Alloc(4)  -- Allocate 4 bytes for a float
+    local groundZ = MemoryUtils.Alloc("groundZ", 4)
     local found = MISC.GET_GROUND_Z_FOR_3D_COORD(x, y, z, groundZ, false, false)
 
     local result = nil
@@ -774,7 +278,6 @@ function Spooner.GetGroundZAtPosition(x, y, z)
         result = Memory.ReadFloat(groundZ)
     end
 
-    Memory.Free(groundZ)
     return result
 end
 
@@ -788,8 +291,8 @@ function Spooner.ClipEntityToGround(entity, newPos)
 
     if groundZ then
         -- Get entity model dimensions
-        local min = Memory.Alloc(24)
-        local max = Memory.Alloc(24)
+        local min = MemoryUtils.Alloc("clipMin", 24)
+        local max = MemoryUtils.Alloc("clipMax", 24)
         MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
 
         local minX = Memory.ReadFloat(min)
@@ -798,9 +301,6 @@ function Spooner.ClipEntityToGround(entity, newPos)
         local maxX = Memory.ReadFloat(max)
         local maxY = Memory.ReadFloat(max + 8)
         local maxZ = Memory.ReadFloat(max + 16)
-
-        Memory.Free(min)
-        Memory.Free(max)
 
         -- Apply pending rotation first so GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS works correctly
         local rot = Spooner.grabbedEntityRotation or ENTITY.GET_ENTITY_ROTATION(entity, 2)
@@ -1077,10 +577,9 @@ function Spooner.ToggleSpoonerMode(f)
 
             -- Remove camera blip
             if Spooner.freecamBlip then
-                local ptr = Memory.AllocInt()
+                local ptr = MemoryUtils.AllocInt("blipPtr")
                 Memory.WriteInt(ptr, Spooner.freecamBlip)
                 HUD.REMOVE_BLIP(ptr)
-                Memory.Free(ptr)
                 Spooner.freecamBlip = nil
             end
 
@@ -1171,8 +670,8 @@ function Spawner.GetModelSize(modelHash)
         return 10.0  -- Default distance if model can't load
     end
 
-    local min = Memory.Alloc(24)
-    local max = Memory.Alloc(24)
+    local min = MemoryUtils.Alloc("modelSizeMin", 24)
+    local max = MemoryUtils.Alloc("modelSizeMax", 24)
     MISC.GET_MODEL_DIMENSIONS(modelHash, min, max)
 
     local minX = Memory.ReadFloat(min)
@@ -1181,9 +680,6 @@ function Spawner.GetModelSize(modelHash)
     local maxX = Memory.ReadFloat(max)
     local maxY = Memory.ReadFloat(max + 8)
     local maxZ = Memory.ReadFloat(max + 16)
-
-    Memory.Free(min)
-    Memory.Free(max)
 
     -- Calculate the diagonal size of the bounding box
     local sizeX = maxX - minX
@@ -1303,10 +799,10 @@ function Spawner.GetCrosshairWorldPosition()
     }
 
     -- Raycast to find ground/surface
-    local hit = Memory.Alloc(4)
-    local endCoords = Memory.Alloc(24)
-    local surfaceNormal = Memory.Alloc(24)
-    local entityHit = Memory.Alloc(4)
+    local hit = MemoryUtils.AllocInt("crosshairHit")
+    local endCoords = MemoryUtils.Alloc("crosshairEndCoords", 24)
+    local surfaceNormal = MemoryUtils.Alloc("crosshairSurfaceNormal", 24)
+    local entityHit = MemoryUtils.AllocInt("crosshairEntityHit")
 
     local rayHandle = SHAPETEST.START_EXPENSIVE_SYNCHRONOUS_SHAPE_TEST_LOS_PROBE(
         camPos.x, camPos.y, camPos.z,
@@ -1342,11 +838,6 @@ function Spawner.GetCrosshairWorldPosition()
         end
     end
 
-    Memory.Free(hit)
-    Memory.Free(endCoords)
-    Memory.Free(surfaceNormal)
-    Memory.Free(entityHit)
-
     return finalPos, didHitGround
 end
 
@@ -1354,20 +845,18 @@ function Spawner.UpdatePreview()
     -- Handle pending entity deletion (from UI thread selection)
     if Spooner.pendingPreviewDelete then
         if ENTITY.DOES_ENTITY_EXIST(Spooner.pendingPreviewDelete) then
-            local ptr = Memory.AllocInt()
+            local ptr = MemoryUtils.AllocInt("previewDeletePtr")
             Memory.WriteInt(ptr, Spooner.pendingPreviewDelete)
             ENTITY.DELETE_ENTITY(ptr)
-            Memory.Free(ptr)
         end
         Spooner.pendingPreviewDelete = nil
     end
 
     if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
         if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-            local ptr = Memory.AllocInt()
+            local ptr = MemoryUtils.AllocInt("previewEntityPtr")
             Memory.WriteInt(ptr, Spooner.previewEntity)
             ENTITY.DELETE_ENTITY(ptr)
-            Memory.Free(ptr)
             Spooner.previewEntity = nil
         end
         return
@@ -1423,47 +912,19 @@ end
 local DrawManager = {}
 
 function DrawManager.PerformRaycastCheck()
-    if Spooner.raycastData then
-        local ready, hitValue, entityHitValue = MemoryUtils.GetRaycastResult(Spooner.raycastData)
+    local isTargeted, targetedEntity = Raycast.PerformCheck(
+        Spooner.freecam,
+        Spooner.isGrabbing,
+        Spooner.IsEntityRestricted
+    )
 
-        if ready then
-            if hitValue == 1 and entityHitValue ~= 0 and not Spooner.IsEntityRestricted(entityHitValue) then
-                Spooner.isEntityTargeted = true
-                Spooner.targetedEntity = entityHitValue
-            else
-                Spooner.isEntityTargeted = false
-                Spooner.targetedEntity = nil
-            end
-
-            MemoryUtils.FreeRaycastData(Spooner.raycastData)
-            Spooner.raycastData = nil
-        end
-    end
-
-    if not Spooner.isGrabbing then
-        Spooner.raycastFrameCounter = Spooner.raycastFrameCounter + 1
-        if Spooner.raycastFrameCounter >= CONSTANTS.RAYCAST_INTERVAL then
-            Spooner.raycastFrameCounter = 0
-
-            local camCoord = CAM.GET_CAM_COORD(Spooner.freecam)
-            local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)
-
-            local radZ = math.rad(camRot.z)
-            local radX = math.rad(camRot.x)
-            local forwardX = -math.sin(radZ) * math.cos(radX)
-            local forwardY = math.cos(radZ) * math.cos(radX)
-            local forwardZ = math.sin(radX)
-
-            local endX = camCoord.x + forwardX * CONSTANTS.RAYCAST_MAX_DISTANCE
-            local endY = camCoord.y + forwardY * CONSTANTS.RAYCAST_MAX_DISTANCE
-            local endZ = camCoord.z + forwardZ * CONSTANTS.RAYCAST_MAX_DISTANCE
-
-            Spooner.raycastData = MemoryUtils.PerformRaycast(
-                camCoord.x, camCoord.y, camCoord.z,
-                endX, endY, endZ,
-                CONSTANTS.RAYCAST_FLAGS
-            )
-        end
+    if isTargeted then
+        Spooner.isEntityTargeted = true
+        Spooner.targetedEntity = targetedEntity
+    elseif Raycast.data == nil then
+        -- Only reset when raycast completed (not while waiting)
+        Spooner.isEntityTargeted = false
+        Spooner.targetedEntity = nil
     end
 end
 
@@ -1517,7 +978,7 @@ function DrawManager.DrawInstructionalButtons()
     if not Spooner.inSpoonerMode then
         return
     end
-    
+
     if not Spooner.scaleform then
         Spooner.scaleform = GRAPHICS.REQUEST_SCALEFORM_MOVIE("instructional_buttons")
     end
@@ -1660,8 +1121,8 @@ function DrawManager.Draw3DBox(entity)
 
     -- Get entity bounding box
     -- GTA V Vector3 has padding: x(4) + pad(4) + y(4) + pad(4) + z(4) + pad(4) = 24 bytes
-    local min = Memory.Alloc(24)
-    local max = Memory.Alloc(24)
+    local min = MemoryUtils.Alloc("boxMin", 24)
+    local max = MemoryUtils.Alloc("boxMax", 24)
     MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
 
     -- Read with proper Vector3 stride (8 bytes per component due to padding)
@@ -1671,12 +1132,6 @@ function DrawManager.Draw3DBox(entity)
     local maxX = Memory.ReadFloat(max)
     local maxY = Memory.ReadFloat(max + 8)
     local maxZ = Memory.ReadFloat(max + 16)
-
-    Memory.Free(min)
-    Memory.Free(max)
-
-    -- Debug: Log dimensions to check values
-    -- CustomLogger.Info(string.format("Dims: X[%.2f,%.2f] Y[%.2f,%.2f] Z[%.2f,%.2f]", minX, maxX, minY, maxY, minZ, maxZ))
 
     -- Calculate the 8 corners of the bounding box
     local corners = {
@@ -1921,7 +1376,7 @@ function DrawManager.ClickGUIInit()
                     ImGui.Text("Rotation")
                     ImGui.Separator()
 
-                    -- Pitch (X rotation) slider - clamped to ±89° to avoid gimbal lock flip
+                    -- Pitch (X rotation) slider - clamped to +/-89 to avoid gimbal lock flip
                     local newPitch, changedPitch = ImGui.SliderFloat("Pitch##rot", rot.x, -89.0, 89.0)
                     if changedPitch then
                         Script.QueueJob(function()
@@ -1930,7 +1385,7 @@ function DrawManager.ClickGUIInit()
                         end)
                     end
 
-                    -- Roll (Y rotation) slider - clamped to ±89° to avoid gimbal lock flip
+                    -- Roll (Y rotation) slider - clamped to +/-89 to avoid gimbal lock flip
                     local newRoll, changedRoll = ImGui.SliderFloat("Roll##rot", rot.y, -89.0, 89.0)
                     if changedRoll then
                         Script.QueueJob(function()
@@ -2250,7 +1705,7 @@ FeatureMgr.AddFeature(
                 Script.QueueJob(function()
                     local netId = Spooner.TakeControlOfEntity(entity)
 
-                    local ptr = Memory.AllocInt()
+                    local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
                     Memory.WriteInt(ptr, entity)
 
                     NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
@@ -2260,8 +1715,6 @@ FeatureMgr.AddFeature(
                     ENTITY.DELETE_ENTITY(ptr)
 
                     CustomLogger.Info("Network ID: " .. tostring(netId))
-
-                    Memory.Free(ptr)
 
                     if ENTITY.DOES_ENTITY_EXIST(entity) then
                         ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
@@ -2357,7 +1810,7 @@ if Config.lockMovementWhileMenuIsOpen then
 end
 
 -- Load entities
-EntityLists.LoadAll()
+EntityLists.LoadAll(propListPath, vehicleListPath, pedListPath)
 
 DrawManager.ClickGUIInit()
 
@@ -2386,7 +1839,7 @@ Script.RegisterLooped(function()
 end)
 
 Script.RegisterLooped(function()
-    Script.QueueJob(function() 
+    Script.QueueJob(function()
         if Spooner.targetedEntity and not Spooner.grabbedEntity then
             NetworkUtils.MaintainNetworkControl(Spooner.targetedEntity)
         end
@@ -2394,7 +1847,7 @@ Script.RegisterLooped(function()
 end)
 
 Script.RegisterLooped(function()
-    Script.QueueJob(function() 
+    Script.QueueJob(function()
         Spooner.ManageEntities()
     end)
 end)
@@ -2405,4 +1858,6 @@ EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
             toggleSpoonerModeFeature:Toggle()
         end)
     end
+    -- Free all cached memory allocations
+    MemoryUtils.FreeAll()
 end)
