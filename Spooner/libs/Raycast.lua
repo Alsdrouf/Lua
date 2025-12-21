@@ -51,9 +51,7 @@ function RaycastLib.New(name, CONSTANTS, CustomLogger, MemoryUtils)
         if resultReady == 2 then
             local hitVal = Memory.ReadInt(hit)
             local entityHitVal = Memory.ReadInt(entityHit)
-            rayHitCoords.x = Memory.ReadFloat(endCoords)
-            rayHitCoords.y = Memory.ReadFloat(endCoords + 8)
-            rayHitCoords.z = Memory.ReadFloat(endCoords + 16)
+            rayHitCoords = MemoryUtils.ReadV3(endCoords)
 
             Raycast.data = nil
 

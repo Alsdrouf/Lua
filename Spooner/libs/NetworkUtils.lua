@@ -82,6 +82,21 @@ function NetworkUtils.New(CONSTANTS)
         return netId
     end
 
+    function self.MaintainNetworkControlV2(entity)
+        -- Skip network functions in singleplayer
+        if not NETWORK.NETWORK_IS_SESSION_STARTED() then
+            return 0
+        end
+
+        local cPhysical = GTA.HandleToPointer(entity)
+        if not cPhysical then return end
+        local playerId = GTA.GetLocalPlayerId()
+        if not playerId then return end
+        local cNetGamePlayer = Players.GetById(playerId)
+        if not cNetGamePlayer then return end
+        NetworkObjectMgr.ChangeOwner(cPhysical.NetObject, cNetGamePlayer, 1)
+    end
+
     return self
 end
 

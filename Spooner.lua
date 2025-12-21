@@ -227,7 +227,7 @@ Spooner.previewModelName = nil
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 
 function Spooner.TakeControlOfEntity(entity)
-    return NetworkUtils.MakeEntityNetworked(entity)
+    return NetworkUtils.MaintainNetworkControlV2(entity)
 end
 
 function Spooner.IsEntityRestricted(entity)
@@ -272,12 +272,23 @@ function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
 end
 
 function Spooner.GetGroundZAtPosition(x, y, z)
-    local groundZ = MemoryUtils.Alloc("groundZ", 4)
     local isTargeted, entityTarget, rayHitCoords = RaycastForClipToGround.PerformCheck(x, y, z + 4, x, y, z - 100, CONSTANTS.CLIP_TO_GROUND_RAYCAST_FLAGS)
 
-    Logger.LogInfo(tostring(rayHitCoords.z))
-
     return rayHitCoords.z
+end
+
+function Spooner.GetEntityDimensions(entity, memoryName)
+    return Spooner.GetModelDimensions(ENTITY.GET_ENTITY_MODEL(entity), memoryName)
+end
+
+function Spooner.GetModelDimensions(modelHash, memoryName)
+    local min = MemoryUtils.AllocV3(memoryName .. "Min")
+    local max = MemoryUtils.AllocV3(memoryName .. "Max")
+    MISC.GET_MODEL_DIMENSIONS(modelHash, min, max)
+    local minV3 = MemoryUtils.ReadV3(min)
+    local maxV3 = MemoryUtils.ReadV3(max)
+
+    return minV3.x, minV3.y, minV3.z, maxV3.x, maxV3.y, maxV3.z
 end
 
 function Spooner.ClipEntityToGround(entity, newPos)
@@ -290,16 +301,7 @@ function Spooner.ClipEntityToGround(entity, newPos)
 
     if groundZ then
         -- Get entity model dimensions
-        local min = MemoryUtils.Alloc("clipMin", 24)
-        local max = MemoryUtils.Alloc("clipMax", 24)
-        MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
-
-        local minX = Memory.ReadFloat(min)
-        local minY = Memory.ReadFloat(min + 8)
-        local minZ = Memory.ReadFloat(min + 16)
-        local maxX = Memory.ReadFloat(max)
-        local maxY = Memory.ReadFloat(max + 8)
-        local maxZ = Memory.ReadFloat(max + 16)
+        local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "clip")
 
         -- Apply pending rotation first so GET_OFFSET_FROM_ENTITY_IN_WORLD_COORDS works correctly
         local rot = Spooner.grabbedEntityRotation or ENTITY.GET_ENTITY_ROTATION(entity, 2)
@@ -629,7 +631,7 @@ function Spooner.ManageEntities()
         local entity = Spooner.managedEntities[i]
         if ENTITY.DOES_ENTITY_EXIST(entity) then
             -- Use lighter function to maintain control without resetting ped tasks
-            NetworkUtils.MaintainNetworkControl(entity)
+            Spooner.TakeControlOfEntity(entity)
         else
             table.remove(Spooner.managedEntities, i)
             CustomLogger.Info("Removed invalid entity from list")
@@ -669,16 +671,7 @@ function Spawner.GetModelSize(modelHash)
         return 10.0  -- Default distance if model can't load
     end
 
-    local min = MemoryUtils.Alloc("modelSizeMin", 24)
-    local max = MemoryUtils.Alloc("modelSizeMax", 24)
-    MISC.GET_MODEL_DIMENSIONS(modelHash, min, max)
-
-    local minX = Memory.ReadFloat(min)
-    local minY = Memory.ReadFloat(min + 8)
-    local minZ = Memory.ReadFloat(min + 16)
-    local maxX = Memory.ReadFloat(max)
-    local maxY = Memory.ReadFloat(max + 8)
-    local maxZ = Memory.ReadFloat(max + 16)
+    local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetModelDimensions(modelHash, "modelSize")
 
     -- Calculate the diagonal size of the bounding box
     local sizeX = maxX - minX
@@ -749,7 +742,7 @@ function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
     local entity = nil
 
     if entityType == "prop" then
-        entity = GTA.CreateObject(modelHash, pos.x, pos.y, pos.z, false, false)
+        entity = GTA.CreateWorldObject(modelHash, pos.x, pos.y, pos.z, false, false)
     elseif entityType == "vehicle" then
         entity = GTA.SpawnVehicle(modelHash, pos.x, pos.y, pos.z, 0.0, false, false)
     elseif entityType == "ped" then
@@ -799,8 +792,8 @@ function Spawner.GetCrosshairWorldPosition()
 
     -- Raycast to find ground/surface
     local hit = MemoryUtils.AllocInt("crosshairHit")
-    local endCoords = MemoryUtils.Alloc("crosshairEndCoords", 24)
-    local surfaceNormal = MemoryUtils.Alloc("crosshairSurfaceNormal", 24)
+    local endCoords = MemoryUtils.AllocV3("crosshairEndCoords")
+    local surfaceNormal = MemoryUtils.AllocV3("crosshairSurfaceNormal")
     local entityHit = MemoryUtils.AllocInt("crosshairEntityHit")
 
     local rayHandle = SHAPETEST.START_EXPENSIVE_SYNCHRONOUS_SHAPE_TEST_LOS_PROBE(
@@ -820,19 +813,17 @@ function Spawner.GetCrosshairWorldPosition()
     local didHitGround = false
 
     if hitResult == 1 then
-        local hitX = Memory.ReadFloat(endCoords)
-        local hitY = Memory.ReadFloat(endCoords + 8)
-        local hitZ = Memory.ReadFloat(endCoords + 16)
+        local hitV3 = MemoryUtils.ReadV3(endCoords)
 
         -- Calculate distance to hit point
-        local dx = hitX - camPos.x
-        local dy = hitY - camPos.y
-        local dz = hitZ - camPos.z
+        local dx = hit.x - camPos.x
+        local dy = hit.y - camPos.y
+        local dz = hit.z - camPos.z
         local hitDistance = math.sqrt(dx*dx + dy*dy + dz*dz)
 
         -- If hit is within reasonable distance, use it; otherwise spawn in front
         if hitDistance < maxRaycastDistance then
-            finalPos = { x = hitX, y = hitY, z = hitZ }
+            finalPos = hitV3
             didHitGround = true
         end
     end
@@ -1119,18 +1110,7 @@ function DrawManager.Draw3DBox(entity)
     end
 
     -- Get entity bounding box
-    -- GTA V Vector3 has padding: x(4) + pad(4) + y(4) + pad(4) + z(4) + pad(4) = 24 bytes
-    local min = MemoryUtils.Alloc("boxMin", 24)
-    local max = MemoryUtils.Alloc("boxMax", 24)
-    MISC.GET_MODEL_DIMENSIONS(ENTITY.GET_ENTITY_MODEL(entity), min, max)
-
-    -- Read with proper Vector3 stride (8 bytes per component due to padding)
-    local minX = Memory.ReadFloat(min)
-    local minY = Memory.ReadFloat(min + 8)
-    local minZ = Memory.ReadFloat(min + 16)
-    local maxX = Memory.ReadFloat(max)
-    local maxY = Memory.ReadFloat(max + 8)
-    local maxZ = Memory.ReadFloat(max + 16)
+    local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "3DBox")
 
     -- Calculate the 8 corners of the bounding box
     local corners = {
@@ -1813,13 +1793,22 @@ EntityLists.LoadAll(propListPath, vehicleListPath, pedListPath)
 
 DrawManager.ClickGUIInit()
 
+-- Thread for movement and action
 Script.RegisterLooped(function()
-    Spooner.UpdateFreecam()
-    DrawManager.DrawCrosshair()
-    DrawManager.DrawInstructionalButtons()
-    DrawManager.DrawSelectedEntityMarker()
-    Spawner.UpdatePreview()
-    Spawner.HandleInput()
+    Script.QueueJob(function()
+        Spooner.UpdateFreecam()
+        Spawner.HandleInput()
+        Spawner.UpdatePreview()
+    end)
+end)
+
+-- Thread for on screen display
+Script.RegisterLooped(function()
+    Script.QueueJob(function()
+        DrawManager.DrawCrosshair()
+        DrawManager.DrawInstructionalButtons()
+        DrawManager.DrawSelectedEntityMarker()
+    end)
 end)
 
 Script.RegisterLooped(function()
@@ -1833,16 +1822,14 @@ end)
 
 Script.RegisterLooped(function()
     if Spooner.grabbedEntity then
-        NetworkUtils.MaintainNetworkControl(Spooner.grabbedEntity)
+        Script.QueueJob(function() 
+            Spooner.TakeControlOfEntity(Spooner.targetedEntity)
+        end)
+    elseif Spooner.targetedEntity then
+        Script.QueueJob(function() 
+            Spooner.TakeControlOfEntity(Spooner.targetedEntity)
+        end)
     end
-end)
-
-Script.RegisterLooped(function()
-    Script.QueueJob(function()
-        if Spooner.targetedEntity and not Spooner.grabbedEntity then
-            NetworkUtils.MaintainNetworkControl(Spooner.targetedEntity)
-        end
-    end)
 end)
 
 Script.RegisterLooped(function()
