@@ -1,18 +1,19 @@
 local RaycastLib = {}
 
-function RaycastLib.New(CONSTANTS, MemoryUtils)
+function RaycastLib.New(name, CONSTANTS, CustomLogger, MemoryUtils)
     local Raycast = {}
 
     -- Active raycast data
     Raycast.data = nil
     Raycast.frameCounter = 0
     Raycast.currentTarget = nil
+    Raycast.currentRayHitCoords = {x=0,y=0,z=0}
 
     -- Allocate persistent memory for raycast results using MemoryUtils
-    local hit = MemoryUtils.AllocInt("raycast_hit")
-    local endCoords = MemoryUtils.Alloc("raycast_endCoords", 24)
-    local surfaceNormal = MemoryUtils.Alloc("raycast_surfaceNormal", 24)
-    local entityHit = MemoryUtils.AllocInt("raycast_entityHit")
+    local hit = MemoryUtils.AllocInt(name .. "raycast_hit")
+    local endCoords = MemoryUtils.Alloc(name .. "raycast_endCoords", 24)
+    local surfaceNormal = MemoryUtils.Alloc(name .. "raycast_surfaceNormal", 24)
+    local entityHit = MemoryUtils.AllocInt(name .. "raycast_entityHit")
 
     function Raycast.StartProbe(startX, startY, startZ, endX, endY, endZ, flags)
         local handle = SHAPETEST.START_SHAPE_TEST_LOS_PROBE(
@@ -25,7 +26,6 @@ function RaycastLib.New(CONSTANTS, MemoryUtils)
 
         Raycast.data = {
             handle = handle,
-            resultChecked = false
         }
 
         Raycast.currentTarget = nil
@@ -33,9 +33,11 @@ function RaycastLib.New(CONSTANTS, MemoryUtils)
         return handle
     end
 
-    function Raycast.CheckResult(isEntityRestrictedFunc)
+    function Raycast.CheckResult()
+        local rayHitCoords = {x=0, y=0, z=0}
+
         if not Raycast.data then
-            return false, nil
+            return false, nil, rayHitCoords
         end
 
         local resultReady = SHAPETEST.GET_SHAPE_TEST_RESULT(
@@ -49,26 +51,34 @@ function RaycastLib.New(CONSTANTS, MemoryUtils)
         if resultReady == 2 then
             local hitVal = Memory.ReadInt(hit)
             local entityHitVal = Memory.ReadInt(entityHit)
+            rayHitCoords.x = Memory.ReadFloat(endCoords)
+            rayHitCoords.y = Memory.ReadFloat(endCoords + 8)
+            rayHitCoords.z = Memory.ReadFloat(endCoords + 16)
 
             Raycast.data = nil
 
-            if hitVal == 1 and entityHitVal ~= 0 and not isEntityRestrictedFunc(entityHitVal) then
-                return true, entityHitVal
+            if hitVal == 1 and entityHitVal ~= 0 then
+                return true, entityHitVal, rayHitCoords
             else
-                return true, nil
+                return true, nil, rayHitCoords
             end
         end
 
-        return false, nil
+        return false, nil, rayHitCoords
     end
 
-    function Raycast.PerformCheck(freecam, isGrabbing, isEntityRestrictedFunc)
+    function Raycast.PerformCheck(startX, startY, startZ, endX, endY, endZ, flags)
+        Raycast.frameCounter = Raycast.frameCounter + 1
         local isTargeted = not not Raycast.currentTarget
         local targetedEntity = Raycast.currentTarget
+        local rayHitCoords = Raycast.currentRayHitCoords
 
-        -- Check existing raycast result
-        if Raycast.data then
-            local ready, entity = Raycast.CheckResult(isEntityRestrictedFunc)
+         -- Check existing raycast result
+         if Raycast.data then
+            local ready, entity, hitCoords = Raycast.CheckResult()
+            -- Logger.LogInfo("Ready: " .. tostring(ready) .. ", entity: " .. tostring(entity))
+            rayHitCoords = hitCoords
+            Raycast.currentRayHitCoords = hitCoords
             if ready then
                 if entity then
                     isTargeted = true
@@ -77,37 +87,46 @@ function RaycastLib.New(CONSTANTS, MemoryUtils)
                 else
                     Raycast.currentTarget = nil
                 end
+            elseif Raycast.frameCounter > 20 then
+                Raycast.data = nil
             end
         end
 
         -- Start new raycast if not grabbing
-        if not isGrabbing and not Raycast.data then
-            Raycast.frameCounter = Raycast.frameCounter + 1
+        if not Raycast.data then
             if Raycast.frameCounter >= CONSTANTS.RAYCAST_INTERVAL then
                 Raycast.frameCounter = 0
 
-                local camCoord = CAM.GET_CAM_COORD(freecam)
-                local camRot = CAM.GET_CAM_ROT(freecam, 2)
-
-                local radZ = math.rad(camRot.z)
-                local radX = math.rad(camRot.x)
-                local forwardX = -math.sin(radZ) * math.cos(radX)
-                local forwardY = math.cos(radZ) * math.cos(radX)
-                local forwardZ = math.sin(radX)
-
-                local endX = camCoord.x + forwardX * CONSTANTS.RAYCAST_MAX_DISTANCE
-                local endY = camCoord.y + forwardY * CONSTANTS.RAYCAST_MAX_DISTANCE
-                local endZ = camCoord.z + forwardZ * CONSTANTS.RAYCAST_MAX_DISTANCE
-
                 Raycast.StartProbe(
-                    camCoord.x, camCoord.y, camCoord.z,
+                    startX, startY, startZ,
                     endX, endY, endZ,
-                    CONSTANTS.RAYCAST_FLAGS
+                    flags
                 )
             end
         end
 
-        return isTargeted, targetedEntity
+        return isTargeted, targetedEntity, rayHitCoords
+    end
+
+    function Raycast.PerformCheckForFreecam(freecam)
+        local camCoord = CAM.GET_CAM_COORD(freecam)
+        local camRot = CAM.GET_CAM_ROT(freecam, 2)
+
+        local radZ = math.rad(camRot.z)
+        local radX = math.rad(camRot.x)
+        local forwardX = -math.sin(radZ) * math.cos(radX)
+        local forwardY = math.cos(radZ) * math.cos(radX)
+        local forwardZ = math.sin(radX)
+
+        local endX = camCoord.x + forwardX * CONSTANTS.RAYCAST_MAX_DISTANCE
+        local endY = camCoord.y + forwardY * CONSTANTS.RAYCAST_MAX_DISTANCE
+        local endZ = camCoord.z + forwardZ * CONSTANTS.RAYCAST_MAX_DISTANCE
+
+        return Raycast.PerformCheck(
+            camCoord.x, camCoord.y, camCoord.z,
+            endX, endY, endZ,
+            CONSTANTS.RAYCAST_FLAGS
+        )
     end
 
     return Raycast

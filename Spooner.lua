@@ -54,7 +54,8 @@ local CONSTANTS = {
     PITCH_CLAMP_MAX = 89.0,
     PITCH_CLAMP_MIN = -89.0,
     VELOCITY_MULTIPLIER = 30.0,
-    CLIP_TO_GROUND_DISTANCE = 1.5, -- Distance from ground to trigger clip
+    CLIP_TO_GROUND_DISTANCE = 3, -- Distance from ground to trigger clip
+    CLIP_TO_GROUND_RAYCAST_FLAGS = 33, -- Buildings, world geometry
     POSITION_STEP_DEFAULT = 1.0, -- Default step for position sliders
 }
 
@@ -126,7 +127,8 @@ local NetworkUtils = NetworkUtilsLib.New(CONSTANTS)
 local KeybindsInstance = KeybindsLib.New(PAD)
 local Keybinds = KeybindsInstance.SetupDefaultBinds()
 local CameraUtils = CameraUtilsLib.New(CONSTANTS)
-local Raycast = RaycastLib.New(CONSTANTS, MemoryUtils)
+local Raycast = RaycastLib.New("CameraHit", CONSTANTS, CustomLogger, MemoryUtils)
+local RaycastForClipToGround = RaycastLib.New("ClipToGround", CONSTANTS, CustomLogger, MemoryUtils)
 
 -- ============================================================================
 -- Configuration Management
@@ -271,14 +273,11 @@ end
 
 function Spooner.GetGroundZAtPosition(x, y, z)
     local groundZ = MemoryUtils.Alloc("groundZ", 4)
-    local found = MISC.GET_GROUND_Z_FOR_3D_COORD(x, y, z, groundZ, false, false)
+    local isTargeted, entityTarget, rayHitCoords = RaycastForClipToGround.PerformCheck(x, y, z + 4, x, y, z - 100, CONSTANTS.CLIP_TO_GROUND_RAYCAST_FLAGS)
 
-    local result = nil
-    if found then
-        result = Memory.ReadFloat(groundZ)
-    end
+    Logger.LogInfo(tostring(rayHitCoords.z))
 
-    return result
+    return rayHitCoords.z
 end
 
 function Spooner.ClipEntityToGround(entity, newPos)
@@ -287,7 +286,7 @@ function Spooner.ClipEntityToGround(entity, newPos)
     end
 
     -- Get ground Z at the entity's position
-    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z + 300)
+    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z)
 
     if groundZ then
         -- Get entity model dimensions
@@ -714,18 +713,18 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
 end
 
 function Spawner.SpawnProp(hashString, propName)
-    local hash = Utils.Joaat(hashString)
+    local hash = Utils.sJoaat(hashString)
     local name = propName or hashString
     Spawner.SelectEntity("prop", name, hash)
 end
 
 function Spawner.SpawnVehicle(modelName)
-    local hash = Utils.Joaat(modelName)
+    local hash = Utils.sJoaat(modelName)
     Spawner.SelectEntity("vehicle", modelName, hash)
 end
 
 function Spawner.SpawnPed(modelName)
-    local hash = Utils.Joaat(modelName)
+    local hash = Utils.sJoaat(modelName)
     Spawner.SelectEntity("ped", modelName, hash)
 end
 
@@ -912,13 +911,13 @@ end
 local DrawManager = {}
 
 function DrawManager.PerformRaycastCheck()
-    local isTargeted, targetedEntity = Raycast.PerformCheck(
-        Spooner.freecam,
-        Spooner.isGrabbing,
-        Spooner.IsEntityRestricted
+    if Spooner.isGrabbing then return end
+
+    local isTargeted, targetedEntity = Raycast.PerformCheckForFreecam(
+        Spooner.freecam
     )
 
-    if isTargeted then
+    if isTargeted and not Spooner.IsEntityRestricted(targetedEntity) then
         Spooner.isEntityTargeted = true
         Spooner.targetedEntity = targetedEntity
     elseif Raycast.data == nil then
