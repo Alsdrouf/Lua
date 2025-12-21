@@ -602,6 +602,7 @@ function Spooner.ToggleEntityInManagedList(entity)
         end
     end
 
+    NetworkUtils.MakeEntityNetworked(entity)
     Spooner.TakeControlOfEntity(entity)
     table.insert(Spooner.managedEntities, entity)
     CustomLogger.Info("Entity added to managed list: " .. tostring(entity))
