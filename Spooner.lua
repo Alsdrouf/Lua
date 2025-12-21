@@ -1319,11 +1319,7 @@ function DrawManager.ClickGUIInit()
                     ImGui.Separator()
 
                     -- Position step slider
-                    local newStep, changedStep = ImGui.SliderFloat("Step##pos", Config.positionStep, 0.1, 5.0)
-                    if changedStep then
-                        Config.positionStep = newStep
-                        SaveConfig()
-                    end
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_PositionStep"))
 
                     -- X Position slider
                     local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - Config.positionStep, pos.x + Config.positionStep)
@@ -1758,15 +1754,24 @@ local lockMovementWhileMenuIsOpenFeature = FeatureMgr.AddFeature(
     end
 )
 
+local positionStepFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_PositionStep"),
+    "Step",
+    eFeatureType.SliderFloat,
+    "Position adjustment step size",
+    function(f)
+        Config.positionStep = f:GetFloatValue()
+        SaveConfig()
+    end
+)
+positionStepFeature:SetMinValue(0.1)
+positionStepFeature:SetMaxValue(5.0)
+positionStepFeature:SetFloatValue(Config.positionStep)
+
 -- ============================================================================
 -- Initialization
 -- ============================================================================
 Script.QueueJob(function()
-    -- Load configuration and restore settings
-    local loadedConfig = LoadConfig()
-    if loadedConfig ~= nil and loadedConfig.positionStep ~= nil then
-        Config.positionStep = loadedConfig.positionStep
-    end
 
     -- Load entities
     EntityLists.LoadAll(propListPath, vehicleListPath, pedListPath)
@@ -1774,6 +1779,8 @@ Script.QueueJob(function()
     -- Init gui
     DrawManager.ClickGUIInit()
 
+    -- Load configuration and restore settings
+    local loadedConfig = LoadConfig()
     if loadedConfig ~= nil then
         if loadedConfig.enableF9Key ~= nil and loadedConfig.enableF9Key then
             enableF9KeyFeature:Toggle(loadedConfig.enableF9Key)
@@ -1786,6 +1793,9 @@ Script.QueueJob(function()
         end
         if loadedConfig.lockMovementWhileMenuIsOpen ~= nil and loadedConfig.lockMovementWhileMenuIsOpen then
             lockMovementWhileMenuIsOpenFeature:Toggle(loadedConfig.lockMovementWhileMenuIsOpen)
+        end
+        if loadedConfig.positionStep ~= nil then
+            positionStepFeature:SetFloatValue(loadedConfig.positionStep)
         end
     end
 end)
