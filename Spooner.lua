@@ -559,6 +559,13 @@ function Spooner.ToggleSpoonerMode(f)
         CAM.RENDER_SCRIPT_CAMS(true, false, 0, true, false, 0)
         CAM.SET_CAM_CONTROLS_MINI_MAP_HEADING(Spooner.freecam, true)
 
+        -- Freeze player to prevent falling through the world when camera is far
+        local playerPed = PLAYER.PLAYER_PED_ID()
+        Spooner.playerWasFrozen = Spooner.isEntityFrozen(playerPed)
+        if not Spooner.playerWasFrozen then
+            ENTITY.FREEZE_ENTITY_POSITION(playerPed, true)
+        end
+
         -- Create blip for camera position
         Spooner.freecamBlip = HUD.ADD_BLIP_FOR_COORD(camPos.x, camPos.y, camPos.z)
         HUD.SET_BLIP_SPRITE(Spooner.freecamBlip, 184)  -- Eye/viewing sprite
@@ -575,6 +582,12 @@ function Spooner.ToggleSpoonerMode(f)
             CAM.SET_CAM_ACTIVE(Spooner.freecam, false)
             CAM.DESTROY_CAM(Spooner.freecam, false)
             Spooner.freecam = nil
+
+            -- Restore player frozen state
+            local playerPed = PLAYER.PLAYER_PED_ID()
+            if not Spooner.playerWasFrozen then
+                ENTITY.FREEZE_ENTITY_POSITION(playerPed, false)
+            end
 
             -- Remove camera blip
             if Spooner.freecamBlip then
@@ -1652,17 +1665,22 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
     end
 )
 
+function Spooner.isEntityFrozen(entity)
+    -- Check frozen state via memory (offset 0x2E, bit 1)
+    local isFrozen = false
+    local pEntity = GTA.HandleToPointer(entity)
+    if pEntity then
+        local address = pEntity:GetAddress()
+        local frozenByte = Memory.ReadByte(address + 0x2E)
+        isFrozen = (frozenByte & (1 << 1)) ~= 0
+    end
+    return isFrozen
+end
+
 -- Helper function to update freeze toggle when selecting a new entity
 function Spooner.UpdateFreezeToggleForEntity(entity)
     if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-        -- Check frozen state via memory (offset 0x2E, bit 1)
-        local isFrozen = false
-        local pEntity = GTA.HandleToPointer(entity)
-        if pEntity then
-            local address = pEntity:GetAddress()
-            local frozenByte = Memory.ReadByte(address + 0x2E)
-            isFrozen = (frozenByte & (1 << 1)) ~= 0
-        end
+        local isFrozen = Spooner.isEntityFrozen(entity)
         local isToggled = freezeEntityFeature:IsToggled()
         if isFrozen ~= isToggled and not isRunningFreeze then
             freezeEntityFeature:Toggle(isFrozen)
