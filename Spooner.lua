@@ -477,6 +477,7 @@ function Spooner.UpdateFreecam()
     end
 
     PAD.DISABLE_ALL_CONTROL_ACTIONS(0)
+    KeybindsInstance.EnablePassthroughControls()
 
     local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
     local camRot = CAM.GET_CAM_ROT(Spooner.freecam, 2)

@@ -29,6 +29,20 @@ function KeybindsLib.New(PAD)
         return PAD.GET_DISABLED_CONTROL_NORMAL(0, key)
     end
 
+    -- Controls that should remain enabled while in Spooner mode (passthrough to game)
+    -- These allow game features like pause menu and expanded map to work
+    Keybinds.PassthroughControls = {
+        199,  -- Pause Menu (P)
+        200,  -- Pause Menu alternate (Escape)
+        20,   -- Big Map (Z key)
+    }
+
+    function Keybinds.EnablePassthroughControls()
+        for _, control in ipairs(Keybinds.PassthroughControls) do
+            PAD.ENABLE_CONTROL_ACTION(0, control, true)
+        end
+    end
+
     function Keybinds.SetupDefaultBinds()
         return {
             Grab = Keybinds.CreateKeybind(24, Keybinds.IsPressed),
