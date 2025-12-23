@@ -1028,6 +1028,16 @@ function Spooner.GetAvailableXMLFiles()
     return files
 end
 
+function Spooner.isEntityFrozen(entity)
+    -- Check frozen state via memory (offset 0x2E, bit 1)
+    local isFrozen = false
+    local pEntity = GTA.HandleToPointer(entity)
+    if pEntity and pEntity.IsFixed then
+        isFrozen = true
+    end
+    return isFrozen
+end
+
 -- ============================================================================
 -- Spawner
 -- ============================================================================
@@ -1598,6 +1608,10 @@ function DrawManager.DrawSelectedEntityMarker()
 end
 
 function DrawManager.ClickGUIInit()
+    ClickGUI.AddPlayerTab(pluginName, function()
+        ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableAtPlayer"))
+    end)
+
     ClickGUI.AddTab(pluginName, function()
         if ClickGUI.BeginCustomChildWindow("Spooner") then
             ClickGUI.RenderFeature(Utils.Joaat("ToggleSpoonerMode"))
@@ -2060,16 +2074,6 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
     end
 )
 
-function Spooner.isEntityFrozen(entity)
-    -- Check frozen state via memory (offset 0x2E, bit 1)
-    local isFrozen = false
-    local pEntity = GTA.HandleToPointer(entity)
-    if pEntity and pEntity.IsFixed then
-        isFrozen = true
-    end
-    return isFrozen
-end
-
 -- Helper function to update freeze toggle when selecting a new entity
 function Spooner.UpdateFreezeToggleForEntity(entity)
     if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
@@ -2188,6 +2192,18 @@ local positionStepFeature = FeatureMgr.AddFeature(
 positionStepFeature:SetMinValue(0.1)
 positionStepFeature:SetMaxValue(5.0)
 positionStepFeature:SetFloatValue(Config.positionStep)
+
+FeatureMgr.AddFeature(Utils.Joaat("Spooner_EnableAtPlayer"), "Enable spooner at", eFeatureType.Button, "Enable spooner at the player", function(f)
+    if toggleSpoonerModeFeature:IsToggled() == false then
+        toggleSpoonerModeFeature:Toggle()
+    end
+
+    Script.QueueJob(function()
+        local playerId = Utils.GetSelectedPlayer()
+        local cPed = Players.GetCPed(playerId)
+        CAM.SET_CAM_COORD(Spooner.freecam, cPed.Position.x, cPed.Position.y, cPed.Position.z)
+    end)
+end)
 
 -- ============================================================================
 -- Initialization
