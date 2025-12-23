@@ -11,6 +11,9 @@ FileMgr.CreateDir(menuRootPath .. "\\libs")
 local propListPath = menuRootPath .. "\\Assets\\PropList.xml"
 local vehicleListPath = menuRootPath .. "\\Assets\\VehicleList.xml"
 local pedListPath = menuRootPath .. "\\Assets\\PedList.xml"
+local spoonerSavePath = menuRootPath .. "\\XML"
+
+FileMgr.CreateDir(spoonerSavePath)
 
 -- ============================================================================
 -- Load Libraries
@@ -213,6 +216,7 @@ Spooner.previewModelHash = nil
 Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
+Spooner.saveFileName = "MyPlacements"  -- Default save file name
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MaintainNetworkControlV2(entity)
@@ -640,6 +644,388 @@ function Spooner.ManageEntities()
             CustomLogger.Info("Removed invalid entity from list")
         end
     end
+end
+
+function Spooner.GetVehicleProperties(vehicle)
+    local props = {}
+
+    -- Colors
+    local primaryColorPtr = MemoryUtils.AllocInt("vehPrimary")
+    local secondaryColorPtr = MemoryUtils.AllocInt("vehSecondary")
+    VEHICLE.GET_VEHICLE_COLOURS(vehicle, primaryColorPtr, secondaryColorPtr)
+    props.primaryColor = Memory.ReadInt(primaryColorPtr)
+    props.secondaryColor = Memory.ReadInt(secondaryColorPtr)
+
+    local pearlColorPtr = MemoryUtils.AllocInt("vehPearl")
+    local rimColorPtr = MemoryUtils.AllocInt("vehRim")
+    VEHICLE.GET_VEHICLE_EXTRA_COLOURS(vehicle, pearlColorPtr, rimColorPtr)
+    props.pearlColor = Memory.ReadInt(pearlColorPtr)
+    props.rimColor = Memory.ReadInt(rimColorPtr)
+
+    -- Mod colors
+    local mod1aPtr = MemoryUtils.AllocInt("vehMod1a")
+    local mod1bPtr = MemoryUtils.AllocInt("vehMod1b")
+    local mod1cPtr = MemoryUtils.AllocInt("vehMod1c")
+    VEHICLE.GET_VEHICLE_MOD_COLOR_1(vehicle, mod1aPtr, mod1bPtr, mod1cPtr)
+    props.mod1a = Memory.ReadInt(mod1aPtr)
+    props.mod1b = Memory.ReadInt(mod1bPtr)
+    props.mod1c = Memory.ReadInt(mod1cPtr)
+
+    local mod2aPtr = MemoryUtils.AllocInt("vehMod2a")
+    local mod2bPtr = MemoryUtils.AllocInt("vehMod2b")
+    VEHICLE.GET_VEHICLE_MOD_COLOR_2(vehicle, mod2aPtr, mod2bPtr)
+    props.mod2a = Memory.ReadInt(mod2aPtr)
+    props.mod2b = Memory.ReadInt(mod2bPtr)
+
+    props.isPrimaryCustom = VEHICLE.GET_IS_VEHICLE_PRIMARY_COLOUR_CUSTOM(vehicle)
+    props.isSecondaryCustom = VEHICLE.GET_IS_VEHICLE_SECONDARY_COLOUR_CUSTOM(vehicle)
+
+    -- Tyre smoke color
+    local tyreSmokeRPtr = MemoryUtils.AllocInt("vehTyreSmokeR")
+    local tyreSmokeGPtr = MemoryUtils.AllocInt("vehTyreSmokeG")
+    local tyreSmokeBPtr = MemoryUtils.AllocInt("vehTyreSmokeB")
+    VEHICLE.GET_VEHICLE_TYRE_SMOKE_COLOR(vehicle, tyreSmokeRPtr, tyreSmokeGPtr, tyreSmokeBPtr)
+    props.tyreSmokeR = Memory.ReadInt(tyreSmokeRPtr)
+    props.tyreSmokeG = Memory.ReadInt(tyreSmokeGPtr)
+    props.tyreSmokeB = Memory.ReadInt(tyreSmokeBPtr)
+
+    -- Interior, dashboard and xenon colors - use defaults as these natives may not be available
+    props.interiorColor = 0
+    props.dashboardColor = 0
+    props.xenonColor = 255
+
+    -- Other properties
+    props.livery = VEHICLE.GET_VEHICLE_LIVERY(vehicle)
+    props.plateText = VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT(vehicle)
+    props.plateIndex = VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT_INDEX(vehicle)
+    props.wheelType = VEHICLE.GET_VEHICLE_WHEEL_TYPE(vehicle)
+    props.windowTint = VEHICLE.GET_VEHICLE_WINDOW_TINT(vehicle)
+    props.bulletProofTyres = not VEHICLE.GET_VEHICLE_TYRES_CAN_BURST(vehicle)
+    props.dirtLevel = VEHICLE.GET_VEHICLE_DIRT_LEVEL(vehicle)
+    props.roofState = VEHICLE.GET_CONVERTIBLE_ROOF_STATE(vehicle)
+    props.engineHealth = VEHICLE.GET_VEHICLE_ENGINE_HEALTH(vehicle)
+    props.engineOn = VEHICLE.GET_IS_VEHICLE_ENGINE_RUNNING(vehicle)
+    props.lightsOn = VEHICLE.GET_VEHICLE_LIGHTS_STATE(vehicle, MemoryUtils.AllocInt("vehLightsOn"), MemoryUtils.AllocInt("vehHighBeams"))
+    props.lockStatus = VEHICLE.GET_VEHICLE_DOOR_LOCK_STATUS(vehicle)
+
+    -- Neons - use defaults as these natives may not be available
+    props.neonLeft = false
+    props.neonRight = false
+    props.neonFront = false
+    props.neonBack = false
+    props.neonR = 255
+    props.neonG = 0
+    props.neonB = 255
+
+    -- Mods
+    props.mods = {}
+    props.modVariations = {}
+    for i = 0, 48 do
+        if i >= 17 and i <= 22 then
+            props.mods[i] = VEHICLE.IS_TOGGLE_MOD_ON(vehicle, i)
+        else
+            props.mods[i] = VEHICLE.GET_VEHICLE_MOD(vehicle, i)
+            props.modVariations[i] = VEHICLE.GET_VEHICLE_MOD_VARIATION(vehicle, i)
+        end
+    end
+
+    -- Extras
+    props.extras = {}
+    for i = 1, 12 do
+        if i ~= 9 and i ~= 10 then
+            props.extras[i] = VEHICLE.IS_VEHICLE_EXTRA_TURNED_ON(vehicle, i)
+        end
+    end
+
+    return props
+end
+
+function Spooner.GetPedProperties(ped)
+    local props = {}
+    props.canRagdoll = PED.CAN_PED_RAGDOLL(ped)
+    props.armour = PED.GET_PED_ARMOUR(ped)
+
+    local weaponHashPtr = MemoryUtils.AllocInt("pedWeaponHash")
+    WEAPON.GET_CURRENT_PED_WEAPON(ped, weaponHashPtr, true)
+    props.currentWeapon = string.format("0x%X", Memory.ReadInt(weaponHashPtr))
+
+    return props
+end
+
+function Spooner.GetEntityPlacementData(entity)
+    if not ENTITY.DOES_ENTITY_EXIST(entity) then
+        return nil
+    end
+
+    local placement = {}
+    local modelHash = ENTITY.GET_ENTITY_MODEL(entity)
+
+    -- Format model hash as hex string like Menyoo does
+    placement.modelHash = string.format("0x%x", modelHash)
+    placement.hashName = GTA.GetModelNameFromHash(modelHash) or ""
+    placement.handle = entity
+
+    -- Determine entity type: 1 = ped, 2 = vehicle, 3 = object
+    if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
+        placement.type = 2
+        placement.vehicleProperties = Spooner.GetVehicleProperties(entity)
+    elseif ENTITY.IS_ENTITY_A_PED(entity) then
+        placement.type = 1
+        placement.pedProperties = Spooner.GetPedProperties(entity)
+    else
+        placement.type = 3
+    end
+
+    -- Position and rotation
+    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+    local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
+    placement.position = {x = pos.x, y = pos.y, z = pos.z}
+    placement.rotation = {x = rot.x, y = rot.y, z = rot.z}
+
+    -- Entity properties
+    placement.frozen = Spooner.isEntityFrozen(entity)
+    placement.dynamic = not placement.frozen
+    placement.health = ENTITY.GET_ENTITY_HEALTH(entity)
+    placement.maxHealth = ENTITY.GET_ENTITY_MAX_HEALTH(entity)
+    placement.isInvincible = ENTITY.GET_ENTITY_CAN_BE_DAMAGED(entity) == false
+    placement.hasGravity = true  -- Default, no easy way to check
+
+    return placement
+end
+
+function Spooner.SaveDatabaseToXML(filename)
+    if #Spooner.managedEntities == 0 then
+        CustomLogger.Warn("No entities in database to save")
+        GUI.AddToast("Spooner", "No entities in database to save", 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+
+    local placements = {}
+    local referenceCoords = nil
+
+    for _, entity in ipairs(Spooner.managedEntities) do
+        local placementData = Spooner.GetEntityPlacementData(entity)
+        if placementData then
+            table.insert(placements, placementData)
+
+            -- Use first entity position as reference coords
+            if not referenceCoords then
+                referenceCoords = placementData.position
+            end
+        end
+    end
+
+    if #placements == 0 then
+        CustomLogger.Warn("No valid entities to save")
+        GUI.AddToast("Spooner", "No valid entities to save", 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+
+    local xmlContent = XMLParser.GenerateSpoonerXML(placements, referenceCoords)
+    local filePath = spoonerSavePath .. "\\" .. filename .. ".xml"
+
+    if FileMgr.WriteFileContent(filePath, xmlContent) then
+        CustomLogger.Info("Saved " .. #placements .. " entities to " .. filePath)
+        GUI.AddToast("Spooner", "Saved " .. #placements .. " entities to " .. filename .. ".xml", 3000, eToastPos.BOTTOM_RIGHT)
+        return true
+    else
+        CustomLogger.Error("Failed to save database to " .. filePath)
+        GUI.AddToast("Spooner", "Failed to save database", 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+end
+
+function Spooner.ApplyVehicleProperties(vehicle, props)
+    if not props then return end
+
+    -- Apply colors
+    VEHICLE.SET_VEHICLE_COLOURS(vehicle, props.primaryColor or 0, props.secondaryColor or 0)
+    VEHICLE.SET_VEHICLE_EXTRA_COLOURS(vehicle, props.pearlColor or 0, props.rimColor or 0)
+
+    -- Apply mod colors
+    if props.mod1a then
+        VEHICLE.SET_VEHICLE_MOD_COLOR_1(vehicle, props.mod1a, props.mod1b or 0, props.mod1c or 0)
+    end
+    if props.mod2a then
+        VEHICLE.SET_VEHICLE_MOD_COLOR_2(vehicle, props.mod2a, props.mod2b or 0)
+    end
+
+    -- Apply tyre smoke color
+    if props.tyreSmokeR then
+        VEHICLE.SET_VEHICLE_TYRE_SMOKE_COLOR(vehicle, props.tyreSmokeR, props.tyreSmokeG or 255, props.tyreSmokeB or 255)
+    end
+
+    -- Apply other properties
+    if props.plateText and props.plateText ~= "" then
+        VEHICLE.SET_VEHICLE_NUMBER_PLATE_TEXT(vehicle, props.plateText)
+    end
+    if props.plateIndex then
+        VEHICLE.SET_VEHICLE_NUMBER_PLATE_TEXT_INDEX(vehicle, props.plateIndex)
+    end
+    if props.wheelType then
+        VEHICLE.SET_VEHICLE_WHEEL_TYPE(vehicle, props.wheelType)
+    end
+    if props.windowTint then
+        VEHICLE.SET_VEHICLE_WINDOW_TINT(vehicle, props.windowTint)
+    end
+    if props.bulletProofTyres then
+        VEHICLE.SET_VEHICLE_TYRES_CAN_BURST(vehicle, not props.bulletProofTyres)
+    end
+    if props.livery and props.livery >= 0 then
+        VEHICLE.SET_VEHICLE_LIVERY(vehicle, props.livery)
+    end
+
+    -- Apply mods - need to set mod kit first
+    VEHICLE.SET_VEHICLE_MOD_KIT(vehicle, 0)
+
+    if props.mods then
+        for i = 0, 48 do
+            if props.mods[i] then
+                if i >= 17 and i <= 22 then
+                    -- Toggle mods
+                    VEHICLE.TOGGLE_VEHICLE_MOD(vehicle, i, props.mods[i])
+                elseif props.mods[i] >= 0 then
+                    -- Regular mods
+                    local variation = props.modVariations and props.modVariations[i] or false
+                    VEHICLE.SET_VEHICLE_MOD(vehicle, i, props.mods[i], variation)
+                end
+            end
+        end
+    end
+end
+
+function Spooner.ApplyPedProperties(ped, props)
+    if not props then return end
+
+    if props.armour then
+        PED.SET_PED_ARMOUR(ped, props.armour)
+    end
+
+    if props.currentWeapon then
+        local weaponHash = XMLParser.ParseNumber(props.currentWeapon)
+        if weaponHash ~= 0 then
+            WEAPON.GIVE_WEAPON_TO_PED(ped, weaponHash, 999, false, true)
+        end
+    end
+end
+
+function Spooner.SpawnFromPlacement(placement)
+    local modelHash = XMLParser.ParseNumber(placement.modelHash)
+    if modelHash == 0 then
+        CustomLogger.Error("Invalid model hash: " .. tostring(placement.modelHash))
+        return nil
+    end
+
+    -- Request model
+    STREAMING.REQUEST_MODEL(modelHash)
+    local timeout = Time.GetEpocheMs() + 5000
+    while not STREAMING.HAS_MODEL_LOADED(modelHash) and Time.GetEpocheMs() < timeout do
+        Script.Yield(0)
+    end
+
+    if not STREAMING.HAS_MODEL_LOADED(modelHash) then
+        CustomLogger.Error("Failed to load model: " .. tostring(placement.modelHash))
+        return nil
+    end
+
+    local pos = placement.position
+    local rot = placement.rotation
+    local entity = nil
+
+    -- Spawn based on type: 1 = ped, 2 = vehicle, 3 = object
+    if placement.type == 2 then
+        entity = GTA.SpawnVehicle(modelHash, pos.x, pos.y, pos.z, rot.z, false, false)
+        if entity and entity ~= 0 then
+            Spooner.ApplyVehicleProperties(entity, placement.vehicleProperties)
+        end
+    elseif placement.type == 1 then
+        entity = GTA.CreatePed(modelHash, 26, pos.x, pos.y, pos.z, rot.z, false, false)
+        if entity and entity ~= 0 then
+            Spooner.ApplyPedProperties(entity, placement.pedProperties)
+            PED.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(entity, true)
+            TASK.TASK_SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(entity, true)
+        end
+    else
+        entity = GTA.CreateWorldObject(modelHash, pos.x, pos.y, pos.z, false, false)
+    end
+
+    if entity and entity ~= 0 then
+        -- Set exact position from XML (important for objects that may auto-place on ground)
+        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, pos.y, pos.z, false, false, false)
+        -- Apply rotation
+        ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, rot.z, 2, true)
+
+        -- Apply frozen state
+        if placement.frozen then
+            ENTITY.FREEZE_ENTITY_POSITION(entity, true)
+        end
+
+        -- Apply invincible
+        if placement.isInvincible then
+            ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
+        end
+
+        -- Make networked and add to managed list
+        NetworkUtils.MakeEntityNetworked(entity)
+        table.insert(Spooner.managedEntities, entity)
+
+        CustomLogger.Info("Spawned entity: " .. (placement.hashName or placement.modelHash))
+    end
+
+    STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(modelHash)
+    return entity
+end
+
+function Spooner.LoadDatabaseFromXML(filePath)
+    if not FileMgr.DoesFileExist(filePath) then
+        CustomLogger.Error("File not found: " .. filePath)
+        GUI.AddToast("Spooner", "File not found: " .. filePath, 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+
+    local xmlContent = FileMgr.ReadFileContent(filePath)
+    if not xmlContent or xmlContent == "" then
+        CustomLogger.Error("Failed to read file: " .. filePath)
+        GUI.AddToast("Spooner", "Failed to read file", 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+
+    local parsed = XMLParser.ParseSpoonerXML(xmlContent)
+    if not parsed or #parsed.placements == 0 then
+        CustomLogger.Warn("No placements found in file")
+        GUI.AddToast("Spooner", "No placements found in file", 2000, eToastPos.BOTTOM_RIGHT)
+        return false
+    end
+
+    CustomLogger.Info("Loading " .. #parsed.placements .. " placements from " .. filePath)
+    GUI.AddToast("Spooner", "Loading " .. #parsed.placements .. " placements...", 2000, eToastPos.BOTTOM_RIGHT)
+
+    local spawnedCount = 0
+    for _, placement in ipairs(parsed.placements) do
+        local entity = Spooner.SpawnFromPlacement(placement)
+        if entity then
+            spawnedCount = spawnedCount + 1
+        end
+        Script.Yield(0) -- Yield between spawns to prevent freezing
+    end
+
+    CustomLogger.Info("Loaded " .. spawnedCount .. " entities from " .. filePath)
+    GUI.AddToast("Spooner", "Loaded " .. spawnedCount .. " entities", 3000, eToastPos.BOTTOM_RIGHT)
+    return true
+end
+
+function Spooner.GetAvailableXMLFiles()
+    local files = {}
+    -- Use FileMgr.FindFiles to list XML files in the spooner save directory
+    local fileList = FileMgr.FindFiles(spoonerSavePath, ".xml")
+    if fileList then
+        for _, filename in ipairs(fileList) do
+            if filename and filename ~= "" then
+                table.insert(files, filename)
+            end
+        end
+    end
+    return files
 end
 
 -- ============================================================================
@@ -1301,6 +1687,42 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
 
+            ImGui.Separator()
+            ImGui.Text("Save/Load")
+            ImGui.Separator()
+
+            -- File name input for saving
+            local newFileName, fileNameChanged = ImGui.InputText("File Name", Spooner.saveFileName, 256)
+            if fileNameChanged and type(newFileName) == "string" then
+                Spooner.saveFileName = newFileName
+            end
+
+            -- Save button
+            if ImGui.Button("Save Database to XML") then
+                Script.QueueJob(function()
+                    Spooner.SaveDatabaseToXML(Spooner.saveFileName)
+                end)
+            end
+
+            ImGui.Spacing()
+
+            -- Load section - list available XML files
+            if ImGui.TreeNode("Load from XML") then
+                local xmlFiles = Spooner.GetAvailableXMLFiles()
+                if #xmlFiles == 0 then
+                    ImGui.Text("No XML files found")
+                else
+                    for _, filename in ipairs(xmlFiles) do
+                        if ImGui.Button(filename) then
+                            Script.QueueJob(function()
+                                Spooner.LoadDatabaseFromXML(filename)
+                            end)
+                        end
+                    end
+                end
+                ImGui.TreePop()
+            end
+
             ClickGUI.EndCustomChildWindow()
         end
 
@@ -1642,10 +2064,8 @@ function Spooner.isEntityFrozen(entity)
     -- Check frozen state via memory (offset 0x2E, bit 1)
     local isFrozen = false
     local pEntity = GTA.HandleToPointer(entity)
-    if pEntity then
-        local address = pEntity:GetAddress()
-        local frozenByte = Memory.ReadByte(address + 0x2E)
-        isFrozen = (frozenByte & (1 << 1)) ~= 0
+    if pEntity and pEntity.IsFixed then
+        isFrozen = true
     end
     return isFrozen
 end
