@@ -1,3 +1,13 @@
+local eMigrationType = {
+    MIGRATE_PROXIMITY = 0x0,
+    MIGRATE_OUT_OF_SCOPE = 0x1,
+    MIGRATE_SCRIPT = 0x2,
+    MIGRATE_FORCED = 0x3,
+    MIGRATE_REASSIGNMENT = 0x4,
+    MIGRATE_FROZEN_PED = 0x5,
+    NUM_MIGRATION_TYPES = 0x6,
+}
+
 local NetworkUtils = {}
 
 function NetworkUtils.New(CONSTANTS)
@@ -95,7 +105,7 @@ function NetworkUtils.New(CONSTANTS)
         if not playerId then return end
         local cNetGamePlayer = Players.GetById(playerId)
         if not cNetGamePlayer then return end
-        NetworkObjectMgr.ChangeOwner(cPhysical.NetObject, cNetGamePlayer, 1)
+        NetworkObjectMgr.ChangeOwner(cPhysical.NetObject, cNetGamePlayer, eMigrationType.MIGRATE_FORCED)
     end
 
     return self
