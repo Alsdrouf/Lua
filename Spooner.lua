@@ -142,6 +142,7 @@ local Config = {
     throwableMode = false,
     clipToGround = false,
     lockMovementWhileMenuIsOpen = false,
+    lockMovementWhileMenuIsOpenEnhanced = false,
     positionStep = CONSTANTS.POSITION_STEP_DEFAULT,
 }
 
@@ -151,6 +152,7 @@ local function SaveConfig()
         throwableMode = Config.throwableMode,
         clipToGround = Config.clipToGround,
         lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen,
+        lockMovementWhileMenuIsOpenEnhanced = Config.lockMovementWhileMenuIsOpenEnhanced,
         positionStep = Config.positionStep
     })
 
@@ -211,6 +213,7 @@ Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 Spooner.clipToGround = false
 Spooner.lockMovementWhileMenuIsOpen = false
+Spooner.lockMovementWhileMenuIsOpenEnhanced = false
 -- Preview spawn system
 Spooner.previewEntity = nil
 Spooner.previewModelHash = nil
@@ -265,6 +268,10 @@ function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
         y = vec.x * fwd.x + vec.y * fwd.y + vec.z * fwd.z,
         z = vec.x * up.x + vec.y * up.y + vec.z * up.z
     }
+end
+
+function Spooner.ShouldLockMovement()
+    return GUI.IsOpen() and (Spooner.lockMovementWhileMenuIsOpen or (Spooner.lockMovementWhileMenuIsOpenEnhanced and (ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow) or ImGui.IsAnyItemHovered())))
 end
 
 function Spooner.GetGroundZAtPosition(x, y, z)
@@ -467,7 +474,7 @@ function Spooner.HandleEntityGrabbing()
 
     local isRightClickPressed = Keybinds.Grab.IsPressed()
 
-    if not Spooner.previewModelHash and (not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen) then
+    if not Spooner.previewModelHash and not Spooner.ShouldLockMovement() then
         if isRightClickPressed and (Spooner.isGrabbing or (Spooner.isEntityTargeted and Spooner.targetedEntity)) then
             if not Spooner.isGrabbing then
                 Spooner.StartGrabbing()
@@ -525,7 +532,7 @@ function Spooner.UpdateFreecam()
     camPos.y = camPos.y + (rightY * (moveRight - moveLeft) * speed)
     camPos.z = camPos.z + ((moveUp - moveDown) * speed)
 
-    if not GUI.IsOpen() or not Spooner.lockMovementWhileMenuIsOpen then
+    if not Spooner.ShouldLockMovement() then
         CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
         CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
     end
@@ -1746,6 +1753,7 @@ function DrawManager.ClickGUIInit()
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpenEnhanced"))
                     ClickGUI.EndCustomChildWindow()
                 end
                 ImGui.EndTabItem()
@@ -2561,6 +2569,18 @@ local lockMovementWhileMenuIsOpenFeature = FeatureMgr.AddFeature(
     end
 )
 
+local lockMovementWhileMenuIsOpenEnhancedFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_LockMovementWhileMenuIsOpenEnhanced"),
+    "Lock Movement while menu is open and hovering over it",
+    eFeatureType.Toggle,
+    "Lock cam movement and entity grab while menu is open and hovering over the menu",
+    function (f)
+        Config.lockMovementWhileMenuIsOpenEnhanced = f:IsToggled()
+        Spooner.lockMovementWhileMenuIsOpenEnhanced = Config.lockMovementWhileMenuIsOpenEnhanced
+        SaveConfig()
+    end
+)
+
 local positionStepFeature = FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_PositionStep"),
     "Step",
@@ -2612,6 +2632,9 @@ Script.QueueJob(function()
         end
         if loadedConfig.lockMovementWhileMenuIsOpen ~= nil and loadedConfig.lockMovementWhileMenuIsOpen then
             lockMovementWhileMenuIsOpenFeature:Toggle(loadedConfig.lockMovementWhileMenuIsOpen)
+        end
+        if loadedConfig.lockMovementWhileMenuIsOpenEnhanced ~= nil and loadedConfig.lockMovementWhileMenuIsOpenEnhanced then
+            lockMovementWhileMenuIsOpenEnhancedFeature:Toggle(loadedConfig.lockMovementWhileMenuIsOpenEnhanced)
         end
         if loadedConfig.positionStep ~= nil then
             positionStepFeature:SetFloatValue(loadedConfig.positionStep)
