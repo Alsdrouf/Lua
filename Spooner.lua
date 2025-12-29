@@ -218,6 +218,7 @@ Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 Spooner.saveFileName = "MyPlacements"  -- Default save file name
+Spooner.selectedXMLFile = nil  -- Selected XML file path for loading/deleting
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MaintainNetworkControlV2(entity)
@@ -918,7 +919,7 @@ function Spooner.ApplyPedProperties(ped, props)
     end
 end
 
-function Spooner.SpawnFromPlacement(placement)
+function Spooner.SpawnFromPlacement(placement, skipNetworking)
     local modelHash = XMLParser.ParseNumber(placement.modelHash)
     if modelHash == 0 then
         CustomLogger.Error("Invalid model hash: " .. tostring(placement.modelHash))
@@ -974,8 +975,10 @@ function Spooner.SpawnFromPlacement(placement)
             ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
         end
 
-        -- Make networked and add to managed list
-        NetworkUtils.MakeEntityNetworked(entity)
+        -- Make networked (unless skipped for batch processing) and add to managed list
+        if not skipNetworking then
+            NetworkUtils.MakeEntityNetworked(entity)
+        end
         table.insert(Spooner.managedEntities, entity)
 
         CustomLogger.Info("Spawned entity: " .. (placement.hashName or placement.modelHash))
@@ -1009,17 +1012,24 @@ function Spooner.LoadDatabaseFromXML(filePath)
     CustomLogger.Info("Loading " .. #parsed.placements .. " placements from " .. filePath)
     GUI.AddToast("Spooner", "Loading " .. #parsed.placements .. " placements...", 2000, eToastPos.BOTTOM_RIGHT)
 
-    local spawnedCount = 0
+    local spawnedEntities = {}
     for _, placement in ipairs(parsed.placements) do
-        local entity = Spooner.SpawnFromPlacement(placement)
+        local entity = Spooner.SpawnFromPlacement(placement, true) -- Skip networking during spawn
         if entity then
-            spawnedCount = spawnedCount + 1
+            table.insert(spawnedEntities, entity)
         end
         Script.Yield(0) -- Yield between spawns to prevent freezing
     end
 
-    CustomLogger.Info("Loaded " .. spawnedCount .. " entities from " .. filePath)
-    GUI.AddToast("Spooner", "Loaded " .. spawnedCount .. " entities", 3000, eToastPos.BOTTOM_RIGHT)
+    -- Batch network all spawned entities after loading
+    for _, entity in ipairs(spawnedEntities) do
+        if ENTITY.DOES_ENTITY_EXIST(entity) then
+            NetworkUtils.MakeEntityNetworked(entity)
+        end
+    end
+
+    CustomLogger.Info("Loaded " .. #spawnedEntities .. " entities from " .. filePath)
+    GUI.AddToast("Spooner", "Loaded " .. #spawnedEntities .. " entities", 3000, eToastPos.BOTTOM_RIGHT)
     return true
 end
 
@@ -1622,6 +1632,10 @@ function DrawManager.ClickGUIInit()
     end)
 
     ClickGUI.AddTab(pluginName, function()
+        -- Main tab bar for Spooner with subtabs
+        if ImGui.BeginTabBar("SpoonerMainTabs", 0) then
+            -- Main subtab (contains all existing functionality)
+            if ImGui.BeginTabItem("Main") then
         if ClickGUI.BeginCustomChildWindow("Spooner") then
             ClickGUI.RenderFeature(Utils.Joaat("ToggleSpoonerMode"))
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
@@ -1711,7 +1725,7 @@ function DrawManager.ClickGUIInit()
             ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
 
             ImGui.Separator()
-            ImGui.Text("Save/Load")
+            ImGui.Text("Save")
             ImGui.Separator()
 
             -- File name input for saving
@@ -1725,76 +1739,6 @@ function DrawManager.ClickGUIInit()
                 Script.QueueJob(function()
                     Spooner.SaveDatabaseToXML(Spooner.saveFileName)
                 end)
-            end
-
-            ImGui.Spacing()
-
-            -- Load section - list available XML files
-            if ImGui.TreeNode("Load from XML") then
-                local xmlFiles = Spooner.GetAvailableXMLFiles()
-                if #xmlFiles == 0 then
-                    ImGui.Text("No XML files found")
-                else
-                    -- Build a tree structure from file paths
-                    local fileTree = {}
-                    for _, filename in ipairs(xmlFiles) do
-                        local displayName = filename:gsub(spoonerSavePath .. "\\", ""):gsub(".xml$", "")
-                        local parts = SpoonerUtils.SplitString(displayName, "\\")
-                        if not parts or #parts == 0 then
-                            parts = {displayName}
-                        end
-
-                        local currentLevel = fileTree
-                        for i, part in ipairs(parts) do
-                            if i == #parts then
-                                -- This is the file name (leaf node)
-                                if not currentLevel._files then
-                                    currentLevel._files = {}
-                                end
-                                table.insert(currentLevel._files, {name = part, fullPath = filename})
-                            else
-                                -- This is a folder
-                                if not currentLevel[part] then
-                                    currentLevel[part] = {}
-                                end
-                                currentLevel = currentLevel[part]
-                            end
-                        end
-                    end
-
-                    -- Recursive function to render the tree
-                    local function renderFileTree(tree, depth)
-                        -- First render folders (sorted alphabetically)
-                        local folders = {}
-                        for key, _ in pairs(tree) do
-                            if key ~= "_files" then
-                                table.insert(folders, key)
-                            end
-                        end
-                        table.sort(folders)
-
-                        for _, folderName in ipairs(folders) do
-                            if ImGui.TreeNode(folderName .. "##folder" .. depth .. folderName) then
-                                renderFileTree(tree[folderName], depth + 1)
-                                ImGui.TreePop()
-                            end
-                        end
-
-                        -- Then render files in this folder
-                        if tree._files then
-                            for _, fileInfo in ipairs(tree._files) do
-                                if ImGui.Button(fileInfo.name .. "##" .. fileInfo.fullPath) then
-                                    Script.QueueJob(function()
-                                        Spooner.LoadDatabaseFromXML(fileInfo.fullPath)
-                                    end)
-                                end
-                            end
-                        end
-                    end
-
-                    renderFileTree(fileTree, 0)
-                end
-                ImGui.TreePop()
             end
 
             ClickGUI.EndCustomChildWindow()
@@ -2071,6 +2015,143 @@ function DrawManager.ClickGUIInit()
                 ImGui.EndTabBar()
             end
             ClickGUI.EndCustomChildWindow()
+        end
+                ImGui.EndTabItem()
+            end
+
+            -- Load XML subtab
+            if ImGui.BeginTabItem("Load XML") then
+                if ClickGUI.BeginCustomChildWindow("XML File Browser") then
+                    local xmlFiles = Spooner.GetAvailableXMLFiles()
+
+                    -- Validate selected file still exists
+                    if Spooner.selectedXMLFile then
+                        local fileExists = false
+                        for _, f in ipairs(xmlFiles) do
+                            if f == Spooner.selectedXMLFile then
+                                fileExists = true
+                                break
+                            end
+                        end
+                        if not fileExists then
+                            Spooner.selectedXMLFile = nil
+                        end
+                    end
+
+                    if #xmlFiles == 0 then
+                        ImGui.Text("No XML files found")
+                        ImGui.Text("Save some placements first!")
+                    else
+                        -- Build a tree structure from file paths
+                        local fileTree = {}
+                        for _, filename in ipairs(xmlFiles) do
+                            local displayName = filename:gsub(spoonerSavePath .. "\\", ""):gsub(".xml$", "")
+                            local parts = SpoonerUtils.SplitString(displayName, "\\")
+                            if not parts or #parts == 0 then
+                                parts = {displayName}
+                            end
+
+                            local currentLevel = fileTree
+                            for i, part in ipairs(parts) do
+                                if i == #parts then
+                                    -- This is the file name (leaf node)
+                                    if not currentLevel._files then
+                                        currentLevel._files = {}
+                                    end
+                                    table.insert(currentLevel._files, {name = part, fullPath = filename})
+                                else
+                                    -- This is a folder
+                                    if not currentLevel[part] then
+                                        currentLevel[part] = {}
+                                    end
+                                    currentLevel = currentLevel[part]
+                                end
+                            end
+                        end
+
+                        -- Recursive function to render the tree
+                        local function renderXMLFileTree(tree, depth)
+                            -- First render folders (sorted alphabetically)
+                            local folders = {}
+                            for key, _ in pairs(tree) do
+                                if key ~= "_files" then
+                                    table.insert(folders, key)
+                                end
+                            end
+                            table.sort(folders)
+
+                            for _, folderName in ipairs(folders) do
+                                if ImGui.TreeNode(folderName .. "##xmlfolder" .. depth .. folderName) then
+                                    renderXMLFileTree(tree[folderName], depth + 1)
+                                    ImGui.TreePop()
+                                end
+                            end
+
+                            -- Then render files in this folder as selectables
+                            if tree._files then
+                                for _, fileInfo in ipairs(tree._files) do
+                                    local isSelected = (Spooner.selectedXMLFile == fileInfo.fullPath)
+                                    if ImGui.Selectable(fileInfo.name .. "##xml_" .. fileInfo.fullPath, isSelected) then
+                                        Spooner.selectedXMLFile = fileInfo.fullPath
+                                    end
+                                end
+                            end
+                        end
+
+                        renderXMLFileTree(fileTree, 0)
+                    end
+
+                    ImGui.Separator()
+                    ImGui.Spacing()
+
+                    -- Show selected file info and action buttons
+                    if Spooner.selectedXMLFile then
+                        local selectedDisplayName = Spooner.selectedXMLFile:gsub(spoonerSavePath .. "\\", ""):gsub(".xml$", "")
+                        ImGui.Text("Selected: " .. selectedDisplayName)
+
+                        -- Load button
+                        if ImGui.Button("Load") then
+                            Script.QueueJob(function()
+                                Spooner.LoadDatabaseFromXML(Spooner.selectedXMLFile)
+                            end)
+                        end
+
+                        ImGui.SameLine()
+
+                        -- Delete button
+                        if ImGui.Button("Delete") then
+                            Script.QueueJob(function()
+                                if FileMgr.DeleteFile(Spooner.selectedXMLFile) then
+                                    GUI.AddToast("Spooner", "Deleted: " .. selectedDisplayName, 2000, eToastPos.BOTTOM_RIGHT)
+                                    Spooner.selectedXMLFile = nil
+                                else
+                                    GUI.AddToast("Spooner", "Failed to delete file", 2000, eToastPos.BOTTOM_RIGHT)
+                                end
+                            end)
+                        end
+                    else
+                        ImGui.Text("No file selected")
+                    end
+
+                    ImGui.Separator()
+                    ImGui.Spacing()
+
+                    -- Show folder path
+                    ImGui.Text("XML Folder:")
+                    ImGui.TextWrapped(spoonerSavePath)
+
+                    -- Refresh button
+                    if ImGui.Button("Refresh") then
+                        -- Force refresh by just triggering a re-render (list is fetched each frame)
+                        GUI.AddToast("Spooner", "File list refreshed", 1000, eToastPos.BOTTOM_RIGHT)
+                    end
+
+                    ClickGUI.EndCustomChildWindow()
+                end
+                ImGui.EndTabItem()
+            end
+
+            ImGui.EndTabBar()
         end
     end)
 end
