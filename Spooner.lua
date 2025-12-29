@@ -209,6 +209,7 @@ Spooner.isGrabbing = false
 Spooner.scaleform = nil
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
+Spooner.selectedEntityBlip = nil
 Spooner.throwableVelocityMultiplier = CONSTANTS.VELOCITY_MULTIPLIER
 Spooner.throwableMode = false
 Spooner.clipToGround = false
@@ -603,6 +604,14 @@ function Spooner.ToggleSpoonerMode(f)
                 Spooner.freecamBlip = nil
             end
 
+            -- Remove selected entity blip
+            if Spooner.selectedEntityBlip then
+                local ptr = MemoryUtils.AllocInt("selectedBlipPtr2")
+                Memory.WriteInt(ptr, Spooner.selectedEntityBlip)
+                HUD.REMOVE_BLIP(ptr)
+                Spooner.selectedEntityBlip = nil
+            end
+
             CustomLogger.Info("Freecam disabled")
         end
     end
@@ -621,9 +630,11 @@ function Spooner.ToggleEntityInManagedList(entity)
             if Spooner.selectedEntityIndex == i then
                 Spooner.quickEditEntity = entity
                 Spooner.selectedEntityIndex = 0
+                Spooner.UpdateSelectedEntityBlip()
             elseif Spooner.selectedEntityIndex > i then
                 -- Adjust index if removed entity was before selected one
                 Spooner.selectedEntityIndex = Spooner.selectedEntityIndex - 1
+                Spooner.UpdateSelectedEntityBlip()
             end
             return
         end
@@ -639,6 +650,7 @@ function Spooner.ToggleEntityInManagedList(entity)
     if Spooner.quickEditEntity == entity then
         Spooner.quickEditEntity = nil
         Spooner.selectedEntityIndex = #Spooner.managedEntities
+        Spooner.UpdateSelectedEntityBlip()
     end
 end
 
@@ -666,6 +678,9 @@ function Spooner.SelectEntityForQuickEdit(entity)
         Spooner.quickEditEntity = entity
         Spooner.selectedEntityIndex = 0  -- Clear database selection
     end
+
+    -- Update blip for selected entity
+    Spooner.UpdateSelectedEntityBlip()
 
     -- Update toggles to match entity's current state
     Spooner.UpdateFreezeToggleForEntity(entity)
@@ -700,6 +715,26 @@ function Spooner.GetEditingEntity()
     end
 
     return nil, false
+end
+
+-- Update the blip for the selected entity (database or quick edit)
+function Spooner.UpdateSelectedEntityBlip()
+    -- Remove existing blip if any
+    if Spooner.selectedEntityBlip then
+        local ptr = MemoryUtils.AllocInt("selectedBlipPtr")
+        Memory.WriteInt(ptr, Spooner.selectedEntityBlip)
+        HUD.REMOVE_BLIP(ptr)
+        Spooner.selectedEntityBlip = nil
+    end
+
+    -- Get the entity being edited (database or quick edit)
+    local entity = Spooner.GetEditingEntity()
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        Spooner.selectedEntityBlip = HUD.ADD_BLIP_FOR_ENTITY(entity)
+        HUD.SET_BLIP_SPRITE(Spooner.selectedEntityBlip, 1)  -- Standard blip
+        HUD.SET_BLIP_COLOUR(Spooner.selectedEntityBlip, 1)  -- Red
+        HUD.SET_BLIP_SCALE(Spooner.selectedEntityBlip, 1.0)
+    end
 end
 
 function Spooner.ManageEntities()
@@ -1722,24 +1757,23 @@ function DrawManager.DrawSelectedEntityMarker()
         return
     end
 
-    if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-        local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
-        if ENTITY.DOES_ENTITY_EXIST(entity) then
-            local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
-            local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "SelectedMarker")
-            local height = maxZ - minZ
+    local entity = Spooner.GetEditingEntity()
 
-            -- Draw big arrow pointing down at the entity
-            GRAPHICS.DRAW_MARKER(
-                0,
-                pos.x, pos.y, pos.z + height + 1.0,
-                0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0,
-                1.0, 1.0, 1.5,
-                255, 0, 0, 150,
-                false, false, 2, false, nil, nil, false
-            )
-        end
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+        local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "SelectedMarker")
+        local height = maxZ - minZ
+
+        -- Draw big arrow pointing down at the entity
+        GRAPHICS.DRAW_MARKER(
+            0,
+            pos.x, pos.y, pos.z + height + 1.0,
+            0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0,
+            1.0, 1.0, 1.5,
+            255, 0, 0, 150,
+            false, false, 2, false, nil, nil, false
+        )
     end
 end
 
@@ -1797,6 +1831,7 @@ function DrawManager.ClickGUIInit()
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateSelectedEntityBlip()
                                         Spooner.UpdateFreezeToggleForEntity(item.entity)
                                     end
                                 end
@@ -1814,6 +1849,7 @@ function DrawManager.ClickGUIInit()
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateSelectedEntityBlip()
                                         Spooner.UpdateFreezeToggleForEntity(item.entity)
                                     end
                                 end
@@ -1831,6 +1867,7 @@ function DrawManager.ClickGUIInit()
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateSelectedEntityBlip()
                                         Spooner.UpdateFreezeToggleForEntity(item.entity)
                                     end
                                 end
@@ -2000,59 +2037,39 @@ function DrawManager.ClickGUIInit()
                         -- Delete button
                         ImGui.Spacing()
                         ImGui.Separator()
-                        if ImGui.Button("Delete Entity") then
-                            local entityToDelete = entity
-                            Script.QueueJob(function()
-                                Spooner.TakeControlOfEntity(entityToDelete)
-                                -- Remove from database if present
-                                for i, managedEntity in ipairs(Spooner.managedEntities) do
-                                    if managedEntity == entityToDelete then
-                                        table.remove(Spooner.managedEntities, i)
-                                        break
-                                    end
-                                end
-                                -- Clear selection
-                                if Spooner.quickEditEntity == entityToDelete then
-                                    Spooner.quickEditEntity = nil
-                                end
-                                Spooner.selectedEntityIndex = 0
-                                -- Delete the entity
-                                ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entityToDelete, true, true)
-                                ENTITY.DELETE_ENTITY(entityToDelete)
-                                GUI.AddToast("Spooner", "Entity deleted", 1500, eToastPos.BOTTOM_RIGHT)
-                            end)
-                        end
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
 
                         -- Add/Remove from database button
                         ImGui.Spacing()
                         if not isInDatabase then
                             if ImGui.Button("Add to Database") then
                                 local entityToAdd = entity  -- Capture entity for closure
+                                -- Update state before QueueJob
+                                table.insert(Spooner.managedEntities, entityToAdd)
+                                Spooner.selectedEntityIndex = #Spooner.managedEntities
+                                Spooner.quickEditEntity = nil  -- Clear quick edit since it's now in database
+                                Spooner.UpdateSelectedEntityBlip()
                                 Script.QueueJob(function()
                                     NetworkUtils.MakeEntityNetworked(entityToAdd)
                                     Spooner.TakeControlOfEntity(entityToAdd)
-                                    table.insert(Spooner.managedEntities, entityToAdd)
-                                    Spooner.selectedEntityIndex = #Spooner.managedEntities
-                                    Spooner.quickEditEntity = nil  -- Clear quick edit since it's now in database
                                     GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
                                 end)
                             end
                         else
                             if ImGui.Button("Remove from Database") then
                                 local entityToRemove = entity  -- Capture entity for closure
-                                Script.QueueJob(function()
-                                    -- Find and remove entity from database
-                                    for i, managedEntity in ipairs(Spooner.managedEntities) do
-                                        if managedEntity == entityToRemove then
-                                            table.remove(Spooner.managedEntities, i)
-                                            break
-                                        end
+                                -- Update state before QueueJob
+                                for i, managedEntity in ipairs(Spooner.managedEntities) do
+                                    if managedEntity == entityToRemove then
+                                        table.remove(Spooner.managedEntities, i)
+                                        break
                                     end
-                                    -- Switch to quick edit mode to keep editing
-                                    Spooner.quickEditEntity = entityToRemove
-                                    Spooner.selectedEntityIndex = 0
-                                    GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
-                                end)
+                                end
+                                -- Switch to quick edit mode to keep editing
+                                Spooner.quickEditEntity = entityToRemove
+                                Spooner.selectedEntityIndex = 0
+                                Spooner.UpdateSelectedEntityBlip()
+                                GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
                             end
                         end
                     else
@@ -2487,35 +2504,46 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Delete selected entity from the game",
     function(f)
-        if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-            local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
-
+        local entity, isInDatabase = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
             CustomLogger.Info("Deleting entity: " .. tostring(entity))
 
-            if ENTITY.DOES_ENTITY_EXIST(entity) then
-                Script.QueueJob(function()
-                    local netId = Spooner.TakeControlOfEntity(entity)
-
-                    local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
-                    Memory.WriteInt(ptr, entity)
-
-                    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
-                    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), false)
-                    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
-                    ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
-                    ENTITY.DELETE_ENTITY(ptr)
-
-                    CustomLogger.Info("Network ID: " .. tostring(netId))
-
-                    if ENTITY.DOES_ENTITY_EXIST(entity) then
-                        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
-                    end
-
-                    CustomLogger.Info("Deleted entity: " .. tostring(entity))
-                end)
-
-                table.remove(Spooner.managedEntities, Spooner.selectedEntityIndex)
+            -- Clear selection BEFORE QueueJob to prevent UI from accessing deleted entity
+            if Spooner.quickEditEntity == entity then
+                Spooner.quickEditEntity = nil
             end
+            if isInDatabase then
+                for i, managedEntity in ipairs(Spooner.managedEntities) do
+                    if managedEntity == entity then
+                        table.remove(Spooner.managedEntities, i)
+                        break
+                    end
+                end
+            end
+            Spooner.selectedEntityIndex = 0
+            Spooner.UpdateSelectedEntityBlip()
+
+            Script.QueueJob(function()
+                local netId = Spooner.TakeControlOfEntity(entity)
+
+                local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
+                Memory.WriteInt(ptr, entity)
+
+                NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
+                NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), false)
+                NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
+                ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
+                ENTITY.DELETE_ENTITY(ptr)
+
+                CustomLogger.Info("Network ID: " .. tostring(netId))
+
+                if ENTITY.DOES_ENTITY_EXIST(entity) then
+                    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
+                end
+
+                CustomLogger.Info("Deleted entity: " .. tostring(entity))
+                GUI.AddToast("Spooner", "Entity deleted", 1500, eToastPos.BOTTOM_RIGHT)
+            end)
         else
             GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
