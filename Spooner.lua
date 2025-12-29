@@ -382,11 +382,13 @@ function Spooner.UpdateGrabbedEntity()
 
     local speedMultiplier = Keybinds.MoveFaster.IsPressed() and CONSTANTS.ROTATION_SPEED_BOOST or 1.0
 
-    local scrollSpeed = CONSTANTS.SCROLL_SPEED * speedMultiplier
-    if Keybinds.PushEntity.IsPressed() then
-        Spooner.grabOffsets.y = math.max(Spooner.grabOffsets.y - scrollSpeed, CONSTANTS.MIN_GRAB_DISTANCE)
-    elseif Keybinds.PullEntity.IsPressed() then
-        Spooner.grabOffsets.y = Spooner.grabOffsets.y + scrollSpeed
+    if not Spooner.ShouldLockMovement() then
+        local scrollSpeed = CONSTANTS.SCROLL_SPEED * speedMultiplier
+        if Keybinds.PushEntity.IsPressed() then
+            Spooner.grabOffsets.y = math.max(Spooner.grabOffsets.y - scrollSpeed, CONSTANTS.MIN_GRAB_DISTANCE)
+        elseif Keybinds.PullEntity.IsPressed() then
+            Spooner.grabOffsets.y = Spooner.grabOffsets.y + scrollSpeed
+        end
     end
 
     local rotationSpeed = CONSTANTS.ROTATION_SPEED * speedMultiplier
@@ -1724,12 +1726,16 @@ function DrawManager.DrawSelectedEntityMarker()
         local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
         if ENTITY.DOES_ENTITY_EXIST(entity) then
             local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+            local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "SelectedMarker")
+            local height = maxZ - minZ
+
+            -- Draw big arrow pointing down at the entity
             GRAPHICS.DRAW_MARKER(
-                28,
-                pos.x, pos.y, pos.z,
+                0,
+                pos.x, pos.y, pos.z + height + 1.0,
                 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0,
-                0.3, 0.3, 0.3,
+                1.0, 1.0, 1.5,
                 255, 0, 0, 150,
                 false, false, 2, false, nil, nil, false
             )
