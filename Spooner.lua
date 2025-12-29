@@ -219,6 +219,8 @@ Spooner.previewModelName = nil
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 Spooner.saveFileName = "MyPlacements"  -- Default save file name
 Spooner.selectedXMLFile = nil  -- Selected XML file path for loading/deleting
+Spooner.pendingTabSwitch = nil  -- Tab to switch to (set by right-click selection)
+Spooner.quickEditEntity = nil  -- Entity selected for quick editing (not necessarily in database)
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MaintainNetworkControlV2(entity)
@@ -606,19 +608,100 @@ function Spooner.ToggleEntityInManagedList(entity)
         if e == entity then
             table.remove(Spooner.managedEntities, i)
             CustomLogger.Info("Removed entity from managed list: " .. tostring(entity))
+            -- If this was the selected entity, switch to quick edit mode
+            if Spooner.selectedEntityIndex == i then
+                Spooner.quickEditEntity = entity
+                Spooner.selectedEntityIndex = 0
+            elseif Spooner.selectedEntityIndex > i then
+                -- Adjust index if removed entity was before selected one
+                Spooner.selectedEntityIndex = Spooner.selectedEntityIndex - 1
+            end
             return
         end
     end
 
+    -- Adding entity to database
     NetworkUtils.MakeEntityNetworked(entity)
     Spooner.TakeControlOfEntity(entity)
     table.insert(Spooner.managedEntities, entity)
     CustomLogger.Info("Entity added to managed list: " .. tostring(entity))
+
+    -- If this entity was the quick edit entity, switch to database selection
+    if Spooner.quickEditEntity == entity then
+        Spooner.quickEditEntity = nil
+        Spooner.selectedEntityIndex = #Spooner.managedEntities
+    end
+end
+
+-- Select an entity for quick editing (works with any entity, not just database ones)
+function Spooner.SelectEntityForQuickEdit(entity)
+    if not entity or not ENTITY.DOES_ENTITY_EXIST(entity) then
+        return false
+    end
+
+    -- Check if entity is already in the database
+    local foundIndex = nil
+    for i, managedEntity in ipairs(Spooner.managedEntities) do
+        if managedEntity == entity then
+            foundIndex = i
+            break
+        end
+    end
+
+    if foundIndex then
+        -- Entity is in database - select it from database
+        Spooner.selectedEntityIndex = foundIndex
+        Spooner.quickEditEntity = nil  -- Clear quick edit
+    else
+        -- Entity not in database - use quick edit
+        Spooner.quickEditEntity = entity
+        Spooner.selectedEntityIndex = 0  -- Clear database selection
+    end
+
+    -- Update toggles to match entity's current state
+    Spooner.UpdateFreezeToggleForEntity(entity)
+    Spooner.UpdateDynamicToggleForEntity(entity)
+
+    -- Request tab switch to Database (where Entity Transform is)
+    Spooner.pendingTabSwitch = "Database"
+
+    -- Open the menu if not already open
+    if not GUI.IsOpen() then
+        GUI.Toggle()
+    end
+
+    GUI.AddToast("Spooner", "Entity selected for editing", 1500, eToastPos.BOTTOM_RIGHT)
+    return true
+end
+
+-- Get the entity currently being edited (either from database or quick edit)
+function Spooner.GetEditingEntity()
+    -- Priority: database selection > quick edit
+    if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
+        local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
+        if ENTITY.DOES_ENTITY_EXIST(entity) then
+            return entity, true  -- entity, isInDatabase
+        end
+    end
+
+    -- Fall back to quick edit entity
+    if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
+        return Spooner.quickEditEntity, false  -- entity, isInDatabase
+    end
+
+    return nil, false
 end
 
 function Spooner.ManageEntities()
     if not Spooner.inSpoonerMode then
         return
+    end
+
+    -- Handle right-click to select entity for quick editing (only when not grabbing and not in preview mode)
+    if not Spooner.previewModelHash and not Spooner.isGrabbing and Keybinds.SelectForEdit.IsPressed() then
+        if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
+            Spooner.SelectEntityForQuickEdit(Spooner.targetedEntity)
+        end
     end
 
     -- Block adding to database while in preview mode
@@ -645,6 +728,13 @@ function Spooner.ManageEntities()
             table.remove(Spooner.managedEntities, i)
             CustomLogger.Info("Removed invalid entity from list")
         end
+    end
+
+    -- Also maintain control of quick edit entity if set
+    if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
+        Spooner.TakeControlOfEntity(Spooner.quickEditEntity)
+    elseif Spooner.quickEditEntity then
+        Spooner.quickEditEntity = nil  -- Clear if no longer exists
     end
 end
 
@@ -1055,6 +1145,15 @@ function Spooner.isEntityFrozen(entity)
         isFrozen = true
     end
     return isFrozen
+end
+
+function Spooner.isEntityDynamic(entity)
+    local isDynamic = false
+    local pEntity = GTA.HandleToPointer(entity)
+    if pEntity and pEntity.IsDynamic then
+        isDynamic = true
+    end
+    return isDynamic
 end
 
 -- ============================================================================
@@ -1469,6 +1568,10 @@ function DrawManager.DrawInstructionalButtons()
         local listLabel = isManaged and "Remove from List" or "Add to List"
         DrawManager.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
         buttonIndex = buttonIndex + 1
+
+        -- Quick edit hint
+        DrawManager.AddInstructionalButton(buttonIndex, Keybinds.SelectForEdit.string, "Quick Edit")
+        buttonIndex = buttonIndex + 1
     end
 
     DrawManager.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
@@ -1634,388 +1737,461 @@ function DrawManager.ClickGUIInit()
     ClickGUI.AddTab(pluginName, function()
         -- Main tab bar for Spooner with subtabs
         if ImGui.BeginTabBar("SpoonerMainTabs", 0) then
-            -- Main subtab (contains all existing functionality)
+            -- Main subtab (contains settings)
             if ImGui.BeginTabItem("Main") then
-        if ClickGUI.BeginCustomChildWindow("Spooner") then
-            ClickGUI.RenderFeature(Utils.Joaat("ToggleSpoonerMode"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"))
-
-            ClickGUI.EndCustomChildWindow()
-        end
-
-        -- Managed Entities Database Section
-        if ClickGUI.BeginCustomChildWindow("Managed Entities Database") then
-            -- Categorize entities by type
-            local vehicles = {}
-            local peds = {}
-            local props = {}
-
-            for i, entity in ipairs(Spooner.managedEntities) do
-                if ENTITY.DOES_ENTITY_EXIST(entity) then
-                    if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
-                        table.insert(vehicles, {index = i, entity = entity})
-                    elseif ENTITY.IS_ENTITY_A_PED(entity) then
-                        table.insert(peds, {index = i, entity = entity})
-                    else
-                        table.insert(props, {index = i, entity = entity})
-                    end
+                if ClickGUI.BeginCustomChildWindow("Spooner") then
+                    ClickGUI.RenderFeature(Utils.Joaat("ToggleSpoonerMode"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"))
+                    ClickGUI.EndCustomChildWindow()
                 end
+                ImGui.EndTabItem()
             end
 
-            if ImGui.BeginTabBar("DatabaseTabs", 0) then
-                -- Vehicles Tab
-                if ImGui.BeginTabItem("Vehicles (" .. #vehicles .. ")") then
-                    if #vehicles == 0 then
-                        ImGui.Text("No vehicles in database")
-                    else
-                        for _, item in ipairs(vehicles) do
-                            local label = DrawManager.GetEntityName(item.entity)
-                            local isSelected = (item.index == Spooner.selectedEntityIndex)
-                            if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
-                                Spooner.selectedEntityIndex = item.index
-                                Spooner.UpdateFreezeToggleForEntity(item.entity)
-                            end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
+            -- Database subtab
+            if ImGui.BeginTabItem("Database") then
+                -- Managed Entities Database Section
+                if ClickGUI.BeginCustomChildWindow("Managed Entities") then
+                    -- Categorize entities by type
+                    local vehicles = {}
+                    local peds = {}
+                    local props = {}
 
-                -- Peds Tab
-                if ImGui.BeginTabItem("Peds (" .. #peds .. ")") then
-                    if #peds == 0 then
-                        ImGui.Text("No peds in database")
-                    else
-                        for _, item in ipairs(peds) do
-                            local label = DrawManager.GetEntityName(item.entity)
-                            local isSelected = (item.index == Spooner.selectedEntityIndex)
-                            if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
-                                Spooner.selectedEntityIndex = item.index
-                                Spooner.UpdateFreezeToggleForEntity(item.entity)
-                            end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
-
-                -- Props Tab
-                if ImGui.BeginTabItem("Props (" .. #props .. ")") then
-                    if #props == 0 then
-                        ImGui.Text("No props in database")
-                    else
-                        for _, item in ipairs(props) do
-                            local label = DrawManager.GetEntityName(item.entity)
-                            local isSelected = (item.index == Spooner.selectedEntityIndex)
-                            if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
-                                Spooner.selectedEntityIndex = item.index
-                                Spooner.UpdateFreezeToggleForEntity(item.entity)
-                            end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
-
-                ImGui.EndTabBar()
-            end
-
-            ImGui.Separator()
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
-            ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
-
-            ImGui.Separator()
-            ImGui.Text("Save")
-            ImGui.Separator()
-
-            -- File name input for saving
-            local newFileName, fileNameChanged = ImGui.InputText("File Name", Spooner.saveFileName, 256)
-            if fileNameChanged and type(newFileName) == "string" then
-                Spooner.saveFileName = newFileName
-            end
-
-            -- Save button
-            if ImGui.Button("Save Database to XML") then
-                Script.QueueJob(function()
-                    Spooner.SaveDatabaseToXML(Spooner.saveFileName)
-                end)
-            end
-
-            ClickGUI.EndCustomChildWindow()
-        end
-
-        -- Manual Position/Rotation Control Section
-        if ClickGUI.BeginCustomChildWindow("Entity Transform") then
-            if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-                local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
-                if ENTITY.DOES_ENTITY_EXIST(entity) then
-                    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
-                    local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
-
-                    -- Freeze toggle to prevent physics interference during rotation
-                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_FreezeSelectedEntity"))
-                    ImGui.Spacing()
-
-                    ImGui.Text("Position")
-                    ImGui.Separator()
-
-                    -- Position step slider
-                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_PositionStep"))
-
-                    -- X Position slider
-                    local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - Config.positionStep, pos.x + Config.positionStep)
-                    if changedX then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, newX, pos.y, pos.z, false, false, false)
-                        end)
-                    end
-
-                    -- Y Position slider
-                    local newY, changedY = ImGui.SliderFloat("Y##pos", pos.y, pos.y - Config.positionStep, pos.y + Config.positionStep)
-                    if changedY then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, newY, pos.z, false, false, false)
-                        end)
-                    end
-
-                    -- Z Position slider
-                    local newZ, changedZ = ImGui.SliderFloat("Z##pos", pos.z, pos.z - Config.positionStep, pos.z + Config.positionStep)
-                    if changedZ then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, pos.y, newZ, false, false, false)
-                        end)
-                    end
-
-                    ImGui.Spacing()
-                    ImGui.Text("Rotation")
-                    ImGui.Separator()
-
-                    -- Pitch (X rotation) slider - clamped to +/-89 to avoid gimbal lock flip
-                    local newPitch, changedPitch = ImGui.SliderFloat("Pitch##rot", rot.x, -89.0, 89.0)
-                    if changedPitch then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_ROTATION(entity, newPitch, rot.y, rot.z, 2, true)
-                        end)
-                    end
-
-                    -- Roll (Y rotation) slider - clamped to +/-89 to avoid gimbal lock flip
-                    local newRoll, changedRoll = ImGui.SliderFloat("Roll##rot", rot.y, -89.0, 89.0)
-                    if changedRoll then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_ROTATION(entity, rot.x, newRoll, rot.z, 2, true)
-                        end)
-                    end
-
-                    -- Yaw (Z rotation) slider
-                    local newYaw, changedYaw = ImGui.SliderFloat("Yaw##rot", rot.z, -180.0, 180.0)
-                    if changedYaw then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, newYaw, 2, true)
-                        end)
-                    end
-
-                    ImGui.Spacing()
-                    ImGui.Separator()
-
-                    -- Teleport to entity button
-                    if ImGui.Button("Teleport to Entity") then
-                        Script.QueueJob(function()
-                            local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
-                            if Spooner.inSpoonerMode and Spooner.freecam then
-                                CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
+                    for i, entity in ipairs(Spooner.managedEntities) do
+                        if ENTITY.DOES_ENTITY_EXIST(entity) then
+                            if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
+                                table.insert(vehicles, {index = i, entity = entity})
+                            elseif ENTITY.IS_ENTITY_A_PED(entity) then
+                                table.insert(peds, {index = i, entity = entity})
                             else
-                                local playerPed = PLAYER.PLAYER_PED_ID()
-                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
+                                table.insert(props, {index = i, entity = entity})
                             end
-                        end)
+                        end
                     end
 
-                    ImGui.SameLine()
-
-                    -- Teleport entity to camera/player button
-                    if ImGui.Button("Teleport Entity Here") then
-                        Script.QueueJob(function()
-                            Spooner.TakeControlOfEntity(entity)
-                            local targetPos
-                            if Spooner.inSpoonerMode and Spooner.freecam then
-                                local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
-                                local fwd = CameraUtils.GetBasis(Spooner.freecam)
-                                targetPos = {
-                                    x = camPos.x + fwd.x * 5.0,
-                                    y = camPos.y + fwd.y * 5.0,
-                                    z = camPos.z + fwd.z * 5.0
-                                }
+                    if ImGui.BeginTabBar("DatabaseTabs", 0) then
+                        -- Vehicles Tab
+                        if ImGui.BeginTabItem("Vehicles (" .. #vehicles .. ")") then
+                            if #vehicles == 0 then
+                                ImGui.Text("No vehicles in database")
                             else
-                                local playerPed = PLAYER.PLAYER_PED_ID()
-                                local playerPos = ENTITY.GET_ENTITY_COORDS(playerPed, true)
-                                local playerHeading = ENTITY.GET_ENTITY_HEADING(playerPed)
-                                local rad = math.rad(playerHeading)
-                                targetPos = {
-                                    x = playerPos.x - math.sin(rad) * 5.0,
-                                    y = playerPos.y + math.cos(rad) * 5.0,
-                                    z = playerPos.z
-                                }
+                                for _, item in ipairs(vehicles) do
+                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local isSelected = (item.index == Spooner.selectedEntityIndex)
+                                    if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
+                                        Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                    end
+                                end
                             end
-                            ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
+                            ImGui.EndTabItem()
+                        end
+
+                        -- Peds Tab
+                        if ImGui.BeginTabItem("Peds (" .. #peds .. ")") then
+                            if #peds == 0 then
+                                ImGui.Text("No peds in database")
+                            else
+                                for _, item in ipairs(peds) do
+                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local isSelected = (item.index == Spooner.selectedEntityIndex)
+                                    if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
+                                        Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                    end
+                                end
+                            end
+                            ImGui.EndTabItem()
+                        end
+
+                        -- Props Tab
+                        if ImGui.BeginTabItem("Props (" .. #props .. ")") then
+                            if #props == 0 then
+                                ImGui.Text("No props in database")
+                            else
+                                for _, item in ipairs(props) do
+                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local isSelected = (item.index == Spooner.selectedEntityIndex)
+                                    if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
+                                        Spooner.selectedEntityIndex = item.index
+                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                    end
+                                end
+                            end
+                            ImGui.EndTabItem()
+                        end
+
+                        ImGui.EndTabBar()
+                    end
+
+                    ImGui.Separator()
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteEntity"))
+
+                    ImGui.Separator()
+                    ImGui.Text("Save")
+                    ImGui.Separator()
+
+                    -- File name input for saving
+                    local newFileName, fileNameChanged = ImGui.InputText("File Name", Spooner.saveFileName, 256)
+                    if fileNameChanged and type(newFileName) == "string" then
+                        Spooner.saveFileName = newFileName
+                    end
+
+                    -- Save button
+                    if ImGui.Button("Save Database to XML") then
+                        Script.QueueJob(function()
+                            Spooner.SaveDatabaseToXML(Spooner.saveFileName)
                         end)
                     end
-                else
-                    ImGui.Text("Selected entity no longer exists")
+
+                    ClickGUI.EndCustomChildWindow()
                 end
-            else
-                ImGui.Text("Select an entity from the database above")
+
+                -- Manual Position/Rotation Control Section
+                if ClickGUI.BeginCustomChildWindow("Entity Transform") then
+                    local entity, isInDatabase = Spooner.GetEditingEntity()
+                    if entity then
+                        local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+                        local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
+
+                        -- Show entity info
+                        local entityName = DrawManager.GetEntityName(entity)
+                        ImGui.Text("Editing: " .. entityName)
+                        if not isInDatabase then
+                            ImGui.SameLine()
+                            ImGui.TextColored(1.0, 0.7, 0.0, 1.0, "(Quick Edit)")
+                        end
+                        ImGui.Separator()
+
+                        -- Freeze toggle to prevent physics interference during rotation
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_FreezeSelectedEntity"))
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_DynamicEntity"))
+                        ImGui.Spacing()
+
+                        ImGui.Text("Position")
+                        ImGui.Separator()
+
+                        -- Position step slider
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_PositionStep"))
+
+                        -- X Position slider
+                        local newX, changedX = ImGui.SliderFloat("X##pos", pos.x, pos.x - Config.positionStep, pos.x + Config.positionStep)
+                        if changedX then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, newX, pos.y, pos.z, false, false, false)
+                            end)
+                        end
+
+                        -- Y Position slider
+                        local newY, changedY = ImGui.SliderFloat("Y##pos", pos.y, pos.y - Config.positionStep, pos.y + Config.positionStep)
+                        if changedY then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, newY, pos.z, false, false, false)
+                            end)
+                        end
+
+                        -- Z Position slider
+                        local newZ, changedZ = ImGui.SliderFloat("Z##pos", pos.z, pos.z - Config.positionStep, pos.z + Config.positionStep)
+                        if changedZ then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, pos.x, pos.y, newZ, false, false, false)
+                            end)
+                        end
+
+                        ImGui.Spacing()
+                        ImGui.Text("Rotation")
+                        ImGui.Separator()
+
+                        -- Pitch (X rotation) slider - clamped to +/-89 to avoid gimbal lock flip
+                        local newPitch, changedPitch = ImGui.SliderFloat("Pitch##rot", rot.x, -89.0, 89.0)
+                        if changedPitch then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_ROTATION(entity, newPitch, rot.y, rot.z, 2, true)
+                            end)
+                        end
+
+                        -- Roll (Y rotation) slider - clamped to +/-89 to avoid gimbal lock flip
+                        local newRoll, changedRoll = ImGui.SliderFloat("Roll##rot", rot.y, -89.0, 89.0)
+                        if changedRoll then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_ROTATION(entity, rot.x, newRoll, rot.z, 2, true)
+                            end)
+                        end
+
+                        -- Yaw (Z rotation) slider
+                        local newYaw, changedYaw = ImGui.SliderFloat("Yaw##rot", rot.z, -180.0, 180.0)
+                        if changedYaw then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, newYaw, 2, true)
+                            end)
+                        end
+
+                        ImGui.Spacing()
+                        ImGui.Separator()
+
+                        -- Teleport to entity button
+                        if ImGui.Button("Teleport to Entity") then
+                            Script.QueueJob(function()
+                                local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
+                                if Spooner.inSpoonerMode and Spooner.freecam then
+                                    CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
+                                else
+                                    local playerPed = PLAYER.PLAYER_PED_ID()
+                                    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
+                                end
+                            end)
+                        end
+
+                        ImGui.SameLine()
+
+                        -- Teleport entity to camera/player button
+                        if ImGui.Button("Teleport Entity Here") then
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entity)
+                                local targetPos
+                                if Spooner.inSpoonerMode and Spooner.freecam then
+                                    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+                                    local fwd = CameraUtils.GetBasis(Spooner.freecam)
+                                    targetPos = {
+                                        x = camPos.x + fwd.x * 5.0,
+                                        y = camPos.y + fwd.y * 5.0,
+                                        z = camPos.z + fwd.z * 5.0
+                                    }
+                                else
+                                    local playerPed = PLAYER.PLAYER_PED_ID()
+                                    local playerPos = ENTITY.GET_ENTITY_COORDS(playerPed, true)
+                                    local playerHeading = ENTITY.GET_ENTITY_HEADING(playerPed)
+                                    local rad = math.rad(playerHeading)
+                                    targetPos = {
+                                        x = playerPos.x - math.sin(rad) * 5.0,
+                                        y = playerPos.y + math.cos(rad) * 5.0,
+                                        z = playerPos.z
+                                    }
+                                end
+                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
+                            end)
+                        end
+
+                        -- Delete button
+                        ImGui.Spacing()
+                        ImGui.Separator()
+                        if ImGui.Button("Delete Entity") then
+                            local entityToDelete = entity
+                            Script.QueueJob(function()
+                                Spooner.TakeControlOfEntity(entityToDelete)
+                                -- Remove from database if present
+                                for i, managedEntity in ipairs(Spooner.managedEntities) do
+                                    if managedEntity == entityToDelete then
+                                        table.remove(Spooner.managedEntities, i)
+                                        break
+                                    end
+                                end
+                                -- Clear selection
+                                if Spooner.quickEditEntity == entityToDelete then
+                                    Spooner.quickEditEntity = nil
+                                end
+                                Spooner.selectedEntityIndex = 0
+                                -- Delete the entity
+                                ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entityToDelete, true, true)
+                                ENTITY.DELETE_ENTITY(entityToDelete)
+                                GUI.AddToast("Spooner", "Entity deleted", 1500, eToastPos.BOTTOM_RIGHT)
+                            end)
+                        end
+
+                        -- Add/Remove from database button
+                        ImGui.Spacing()
+                        if not isInDatabase then
+                            if ImGui.Button("Add to Database") then
+                                local entityToAdd = entity  -- Capture entity for closure
+                                Script.QueueJob(function()
+                                    NetworkUtils.MakeEntityNetworked(entityToAdd)
+                                    Spooner.TakeControlOfEntity(entityToAdd)
+                                    table.insert(Spooner.managedEntities, entityToAdd)
+                                    Spooner.selectedEntityIndex = #Spooner.managedEntities
+                                    Spooner.quickEditEntity = nil  -- Clear quick edit since it's now in database
+                                    GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
+                                end)
+                            end
+                        else
+                            if ImGui.Button("Remove from Database") then
+                                local entityToRemove = entity  -- Capture entity for closure
+                                Script.QueueJob(function()
+                                    -- Find and remove entity from database
+                                    for i, managedEntity in ipairs(Spooner.managedEntities) do
+                                        if managedEntity == entityToRemove then
+                                            table.remove(Spooner.managedEntities, i)
+                                            break
+                                        end
+                                    end
+                                    -- Switch to quick edit mode to keep editing
+                                    Spooner.quickEditEntity = entityToRemove
+                                    Spooner.selectedEntityIndex = 0
+                                    GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
+                                end)
+                            end
+                        end
+                    else
+                        ImGui.Text("No entity selected")
+                        ImGui.Spacing()
+                        ImGui.TextWrapped("Select an entity from the database above, or right-click an entity in Spooner mode to edit it.")
+                    end
+                    ClickGUI.EndCustomChildWindow()
+                end
+                ImGui.EndTabItem()
             end
-            ClickGUI.EndCustomChildWindow()
-        end
 
-        -- Entity Spawner Section
-        if ClickGUI.BeginCustomChildWindow("Entity Spawner") then
-            if ImGui.BeginTabBar("SpawnerTabs", 0) then
-                -- Props Tab
-                if ImGui.BeginTabItem("Props") then
-                    -- Filter input (InputText returns: newValue, changed)
-                    local newPropFilter, propFilterChanged = ImGui.InputText("Prop Filter", EntityLists.PropFilter, 256)
-                    if propFilterChanged and type(newPropFilter) == "string" then
-                        EntityLists.PropFilter = newPropFilter
-                    end
-
-                    local filterLower = (EntityLists.PropFilter or ""):lower()
-
-                    -- Sort categories alphabetically
-                    local sortedCategories = {}
-                    for categoryName, _ in pairs(EntityLists.Props) do
-                        table.insert(sortedCategories, categoryName)
-                    end
-                    table.sort(sortedCategories)
-
-                    for _, categoryName in ipairs(sortedCategories) do
-                        local props = EntityLists.Props[categoryName]
-                        -- Filter items within category
-                        local filteredProps = {}
-                        for _, prop in ipairs(props) do
-                            if filterLower == "" or prop.name:lower():find(filterLower, 1, true) then
-                                table.insert(filteredProps, prop)
+            -- Spawner subtab
+            if ImGui.BeginTabItem("Spawner") then
+                if ClickGUI.BeginCustomChildWindow("Entity Spawner") then
+                    if ImGui.BeginTabBar("SpawnerTabs", 0) then
+                        -- Props Tab
+                        if ImGui.BeginTabItem("Props") then
+                            -- Filter input (InputText returns: newValue, changed)
+                            local newPropFilter, propFilterChanged = ImGui.InputText("Prop Filter", EntityLists.PropFilter, 256)
+                            if propFilterChanged and type(newPropFilter) == "string" then
+                                EntityLists.PropFilter = newPropFilter
                             end
-                        end
 
-                        -- Only show category if it has matching items or filter is empty
-                        if #filteredProps > 0 then
-                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
-                            local flags = (filterLower ~= "") and 32 or 0
-                            if ImGui.TreeNodeEx(categoryName .. "##Props", flags) then
-                                for _, prop in ipairs(filteredProps) do
-                                    local displayName = prop.name
-                                    if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
-                                        Spawner.SpawnProp(prop.hash, prop.name)
+                            local filterLower = (EntityLists.PropFilter or ""):lower()
+
+                            -- Sort categories alphabetically
+                            local sortedCategories = {}
+                            for categoryName, _ in pairs(EntityLists.Props) do
+                                table.insert(sortedCategories, categoryName)
+                            end
+                            table.sort(sortedCategories)
+
+                            for _, categoryName in ipairs(sortedCategories) do
+                                local props = EntityLists.Props[categoryName]
+                                -- Filter items within category
+                                local filteredProps = {}
+                                for _, prop in ipairs(props) do
+                                    if filterLower == "" or prop.name:lower():find(filterLower, 1, true) then
+                                        table.insert(filteredProps, prop)
                                     end
                                 end
-                                ImGui.TreePop()
-                            end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
 
-                -- Vehicles Tab
-                if ImGui.BeginTabItem("Vehicles") then
-                    -- Filter input (InputText returns: newValue, changed)
-                    local newVehFilter, vehFilterChanged = ImGui.InputText("Vehicle Filter", EntityLists.VehicleFilter, 256)
-                    if vehFilterChanged and type(newVehFilter) == "string" then
-                        EntityLists.VehicleFilter = newVehFilter
-                    end
-
-                    local filterLower = (EntityLists.VehicleFilter or ""):lower()
-
-                    -- Sort categories alphabetically
-                    local sortedCategories = {}
-                    for categoryName, _ in pairs(EntityLists.Vehicles) do
-                        table.insert(sortedCategories, categoryName)
-                    end
-                    table.sort(sortedCategories)
-
-                    for _, categoryName in ipairs(sortedCategories) do
-                        local vehicles = EntityLists.Vehicles[categoryName]
-                        -- Filter items within category
-                        local filteredVehicles = {}
-                        for _, vehicle in ipairs(vehicles) do
-                            local displayName = GTA.GetDisplayNameFromHash(Utils.Joaat(vehicle.name))
-                            if filterLower == "" or vehicle.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
-                                table.insert(filteredVehicles, {vehicle = vehicle, displayName = displayName})
-                            end
-                        end
-
-                        -- Only show category if it has matching items
-                        if #filteredVehicles > 0 then
-                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
-                            local flags = (filterLower ~= "") and 32 or 0
-                            if ImGui.TreeNodeEx(categoryName .. "##Vehicles", flags) then
-                                for _, item in ipairs(filteredVehicles) do
-                                    if ImGui.Selectable(item.displayName .. "##veh_" .. item.vehicle.name) then
-                                        Spawner.SpawnVehicle(item.vehicle.name)
+                                -- Only show category if it has matching items or filter is empty
+                                if #filteredProps > 0 then
+                                    -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                                    local flags = (filterLower ~= "") and 32 or 0
+                                    if ImGui.TreeNodeEx(categoryName .. "##Props", flags) then
+                                        for _, prop in ipairs(filteredProps) do
+                                            local displayName = prop.name
+                                            if ImGui.Selectable(displayName .. "##prop_" .. prop.hash) then
+                                                Spawner.SpawnProp(prop.hash, prop.name)
+                                            end
+                                        end
+                                        ImGui.TreePop()
                                     end
                                 end
-                                ImGui.TreePop()
                             end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
-
-                -- Peds Tab
-                if ImGui.BeginTabItem("Peds") then
-                    -- Filter input (InputText returns: newValue, changed)
-                    local newPedFilter, pedFilterChanged = ImGui.InputText("Ped Filter", EntityLists.PedFilter, 256)
-                    if pedFilterChanged and type(newPedFilter) == "string" then
-                        EntityLists.PedFilter = newPedFilter
-                    end
-
-                    local filterLower = (EntityLists.PedFilter or ""):lower()
-
-                    -- Sort categories alphabetically
-                    local sortedCategories = {}
-                    for categoryName, _ in pairs(EntityLists.Peds) do
-                        table.insert(sortedCategories, categoryName)
-                    end
-                    table.sort(sortedCategories)
-
-                    for _, categoryName in ipairs(sortedCategories) do
-                        local peds = EntityLists.Peds[categoryName]
-                        -- Filter items within category
-                        local filteredPeds = {}
-                        for _, ped in ipairs(peds) do
-                            local displayName = ped.caption ~= "" and ped.caption or ped.name
-                            if filterLower == "" or ped.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
-                                table.insert(filteredPeds, {ped = ped, displayName = displayName})
-                            end
+                            ImGui.EndTabItem()
                         end
 
-                        -- Only show category if it has matching items
-                        if #filteredPeds > 0 then
-                            -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
-                            local flags = (filterLower ~= "") and 32 or 0
-                            if ImGui.TreeNodeEx(categoryName .. "##Peds", flags) then
-                                for _, item in ipairs(filteredPeds) do
-                                    if ImGui.Selectable(item.displayName .. "##ped_" .. item.ped.name) then
-                                        Spawner.SpawnPed(item.ped.name)
+                        -- Vehicles Tab
+                        if ImGui.BeginTabItem("Vehicles") then
+                            -- Filter input (InputText returns: newValue, changed)
+                            local newVehFilter, vehFilterChanged = ImGui.InputText("Vehicle Filter", EntityLists.VehicleFilter, 256)
+                            if vehFilterChanged and type(newVehFilter) == "string" then
+                                EntityLists.VehicleFilter = newVehFilter
+                            end
+
+                            local filterLower = (EntityLists.VehicleFilter or ""):lower()
+
+                            -- Sort categories alphabetically
+                            local sortedCategories = {}
+                            for categoryName, _ in pairs(EntityLists.Vehicles) do
+                                table.insert(sortedCategories, categoryName)
+                            end
+                            table.sort(sortedCategories)
+
+                            for _, categoryName in ipairs(sortedCategories) do
+                                local vehicles = EntityLists.Vehicles[categoryName]
+                                -- Filter items within category
+                                local filteredVehicles = {}
+                                for _, vehicle in ipairs(vehicles) do
+                                    local displayName = GTA.GetDisplayNameFromHash(Utils.Joaat(vehicle.name))
+                                    if filterLower == "" or vehicle.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
+                                        table.insert(filteredVehicles, {vehicle = vehicle, displayName = displayName})
                                     end
                                 end
-                                ImGui.TreePop()
-                            end
-                        end
-                    end
-                    ImGui.EndTabItem()
-                end
 
-                ImGui.EndTabBar()
-            end
-            ClickGUI.EndCustomChildWindow()
-        end
+                                -- Only show category if it has matching items
+                                if #filteredVehicles > 0 then
+                                    -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                                    local flags = (filterLower ~= "") and 32 or 0
+                                    if ImGui.TreeNodeEx(categoryName .. "##Vehicles", flags) then
+                                        for _, item in ipairs(filteredVehicles) do
+                                            if ImGui.Selectable(item.displayName .. "##veh_" .. item.vehicle.name) then
+                                                Spawner.SpawnVehicle(item.vehicle.name)
+                                            end
+                                        end
+                                        ImGui.TreePop()
+                                    end
+                                end
+                            end
+                            ImGui.EndTabItem()
+                        end
+
+                        -- Peds Tab
+                        if ImGui.BeginTabItem("Peds") then
+                            -- Filter input (InputText returns: newValue, changed)
+                            local newPedFilter, pedFilterChanged = ImGui.InputText("Ped Filter", EntityLists.PedFilter, 256)
+                            if pedFilterChanged and type(newPedFilter) == "string" then
+                                EntityLists.PedFilter = newPedFilter
+                            end
+
+                            local filterLower = (EntityLists.PedFilter or ""):lower()
+
+                            -- Sort categories alphabetically
+                            local sortedCategories = {}
+                            for categoryName, _ in pairs(EntityLists.Peds) do
+                                table.insert(sortedCategories, categoryName)
+                            end
+                            table.sort(sortedCategories)
+
+                            for _, categoryName in ipairs(sortedCategories) do
+                                local peds = EntityLists.Peds[categoryName]
+                                -- Filter items within category
+                                local filteredPeds = {}
+                                for _, ped in ipairs(peds) do
+                                    local displayName = ped.caption ~= "" and ped.caption or ped.name
+                                    if filterLower == "" or ped.name:lower():find(filterLower, 1, true) or displayName:lower():find(filterLower, 1, true) then
+                                        table.insert(filteredPeds, {ped = ped, displayName = displayName})
+                                    end
+                                end
+
+                                -- Only show category if it has matching items
+                                if #filteredPeds > 0 then
+                                    -- Auto-expand when filtering (32 = TreeNodeFlags_DefaultOpen)
+                                    local flags = (filterLower ~= "") and 32 or 0
+                                    if ImGui.TreeNodeEx(categoryName .. "##Peds", flags) then
+                                        for _, item in ipairs(filteredPeds) do
+                                            if ImGui.Selectable(item.displayName .. "##ped_" .. item.ped.name) then
+                                                Spawner.SpawnPed(item.ped.name)
+                                            end
+                                        end
+                                        ImGui.TreePop()
+                                    end
+                                end
+                            end
+                            ImGui.EndTabItem()
+                        end
+
+                        ImGui.EndTabBar()
+                    end
+                    ClickGUI.EndCustomChildWindow()
+                end
                 ImGui.EndTabItem()
             end
 
@@ -2192,25 +2368,23 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
     "Freeze entity position",
     function(f)
         isRunningFreeze = true
-        if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-            local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
-            if ENTITY.DOES_ENTITY_EXIST(entity) then
-                Script.QueueJob(function()
-                    Spooner.TakeControlOfEntity(entity)
-                    local frozen = f:IsToggled()
-                    ENTITY.FREEZE_ENTITY_POSITION(entity, frozen)
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            Script.QueueJob(function()
+                Spooner.TakeControlOfEntity(entity)
+                local frozen = f:IsToggled()
+                ENTITY.FREEZE_ENTITY_POSITION(entity, frozen)
 
-                    -- When unfreezing, activate physics so entity responds to gravity
-                    if not frozen then
-                        ENTITY.SET_ENTITY_DYNAMIC(entity, true)
-                        ENTITY.SET_ENTITY_HAS_GRAVITY(entity, true)
-                        -- Apply small downward force to kickstart physics
-                        ENTITY.APPLY_FORCE_TO_ENTITY(entity, 1, 0.0, 0.0, -0.5, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
-                    end
+                -- When unfreezing, activate physics so entity responds to gravity
+                if not frozen then
+                    ENTITY.SET_ENTITY_DYNAMIC(entity, true)
+                    ENTITY.SET_ENTITY_HAS_GRAVITY(entity, true)
+                    -- Apply small downward force to kickstart physics
+                    ENTITY.APPLY_FORCE_TO_ENTITY(entity, 1, 0.0, 0.0, -0.5, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                end
 
-                    isRunningFreeze = false
-                end)
-            end
+                isRunningFreeze = false
+            end)
         end
     end
 )
@@ -2222,6 +2396,38 @@ function Spooner.UpdateFreezeToggleForEntity(entity)
         local isToggled = freezeEntityFeature:IsToggled()
         if isFrozen ~= isToggled and not isRunningFreeze then
             freezeEntityFeature:Toggle(isFrozen)
+        end
+    end
+end
+
+local isRunningDynamic = false
+
+local dynamicEntityFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_DynamicEntity"),
+    "Dynamic",
+    eFeatureType.Toggle,
+    "Toggle entity dynamic state",
+    function(f)
+        isRunningDynamic = true
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            Script.QueueJob(function()
+                Spooner.TakeControlOfEntity(entity)
+                local dynamic = f:IsToggled()
+                ENTITY.SET_ENTITY_DYNAMIC(entity, dynamic)
+                isRunningDynamic = false 
+            end)
+        end
+    end
+)
+
+-- Helper function to update dynamic toggle when selecting a new entity
+function Spooner.UpdateDynamicToggleForEntity(entity)
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        local isDynamic = Spooner.isEntityDynamic(entity)
+        local isToggled = dynamicEntityFeature:IsToggled()
+        if isDynamic ~= isToggled and not isRunningDynamic then
+            dynamicEntityFeature:Toggle(isDynamic)
         end
     end
 end

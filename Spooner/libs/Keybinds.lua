@@ -64,6 +64,7 @@ function KeybindsLib.New(PAD)
             MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal),
             ConfirmSpawn = Keybinds.CreateKeybind(201, Keybinds.IsJustPressed),  -- Enter key
             CancelSpawn = Keybinds.CreateKeybind(202, Keybinds.IsJustPressed),   -- Backspace key
+            SelectForEdit = Keybinds.CreateKeybind(25, Keybinds.IsJustPressed),  -- Right mouse button (select entity for editing)
         }
     end
 
