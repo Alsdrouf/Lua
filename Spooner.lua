@@ -36,6 +36,7 @@ local KeybindsLib = LoadLib("Keybinds")
 local CameraUtilsLib = LoadLib("CameraUtils")
 local MemoryUtilsLib = LoadLib("MemoryUtils")
 local RaycastLib = LoadLib("Raycast")
+local SpoonerUtils = LoadLib("SpoonerUtils")
 
 -- ============================================================================
 -- Constants
@@ -824,6 +825,14 @@ function Spooner.SaveDatabaseToXML(filename)
     local xmlContent = XMLParser.GenerateSpoonerXML(placements, referenceCoords)
     local filePath = spoonerSavePath .. "\\" .. filename .. ".xml"
 
+    local table = SpoonerUtils.SplitString(filename, "/\\")
+    local folder = ""
+    for i=1, #table - 1 do
+        folder = folder .. "\\" .. table[i]
+        FileMgr.CreateDir(spoonerSavePath .. folder)
+        CustomLogger.Info("Creating dir: " .. spoonerSavePath .. folder)
+    end
+
     if FileMgr.WriteFileContent(filePath, xmlContent) then
         CustomLogger.Info("Saved " .. #placements .. " entities to " .. filePath)
         GUI.AddToast("Spooner", "Saved " .. #placements .. " entities to " .. filename .. ".xml", 3000, eToastPos.BOTTOM_RIGHT)
@@ -1017,7 +1026,7 @@ end
 function Spooner.GetAvailableXMLFiles()
     local files = {}
     -- Use FileMgr.FindFiles to list XML files in the spooner save directory
-    local fileList = FileMgr.FindFiles(spoonerSavePath, ".xml")
+    local fileList = FileMgr.FindFiles(spoonerSavePath, ".xml", true)
     if fileList then
         for _, filename in ipairs(fileList) do
             if filename and filename ~= "" then
@@ -1726,13 +1735,64 @@ function DrawManager.ClickGUIInit()
                 if #xmlFiles == 0 then
                     ImGui.Text("No XML files found")
                 else
+                    -- Build a tree structure from file paths
+                    local fileTree = {}
                     for _, filename in ipairs(xmlFiles) do
-                        if ImGui.Button(filename) then
-                            Script.QueueJob(function()
-                                Spooner.LoadDatabaseFromXML(filename)
-                            end)
+                        local displayName = filename:gsub(spoonerSavePath .. "\\", ""):gsub(".xml$", "")
+                        local parts = SpoonerUtils.SplitString(displayName, "\\")
+                        if not parts or #parts == 0 then
+                            parts = {displayName}
+                        end
+
+                        local currentLevel = fileTree
+                        for i, part in ipairs(parts) do
+                            if i == #parts then
+                                -- This is the file name (leaf node)
+                                if not currentLevel._files then
+                                    currentLevel._files = {}
+                                end
+                                table.insert(currentLevel._files, {name = part, fullPath = filename})
+                            else
+                                -- This is a folder
+                                if not currentLevel[part] then
+                                    currentLevel[part] = {}
+                                end
+                                currentLevel = currentLevel[part]
+                            end
                         end
                     end
+
+                    -- Recursive function to render the tree
+                    local function renderFileTree(tree, depth)
+                        -- First render folders (sorted alphabetically)
+                        local folders = {}
+                        for key, _ in pairs(tree) do
+                            if key ~= "_files" then
+                                table.insert(folders, key)
+                            end
+                        end
+                        table.sort(folders)
+
+                        for _, folderName in ipairs(folders) do
+                            if ImGui.TreeNode(folderName .. "##folder" .. depth .. folderName) then
+                                renderFileTree(tree[folderName], depth + 1)
+                                ImGui.TreePop()
+                            end
+                        end
+
+                        -- Then render files in this folder
+                        if tree._files then
+                            for _, fileInfo in ipairs(tree._files) do
+                                if ImGui.Button(fileInfo.name .. "##" .. fileInfo.fullPath) then
+                                    Script.QueueJob(function()
+                                        Spooner.LoadDatabaseFromXML(fileInfo.fullPath)
+                                    end)
+                                end
+                            end
+                        end
+                    end
+
+                    renderFileTree(fileTree, 0)
                 end
                 ImGui.TreePop()
             end
