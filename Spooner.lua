@@ -661,6 +661,7 @@ function Spooner.SelectEntityForQuickEdit(entity)
     -- Update toggles to match entity's current state
     Spooner.UpdateFreezeToggleForEntity(entity)
     Spooner.UpdateDynamicToggleForEntity(entity)
+    Spooner.UpdateGodModeToggleForEntity(entity)
 
     -- Request tab switch to Database (where Entity Transform is)
     Spooner.pendingTabSwitch = "Database"
@@ -1869,6 +1870,7 @@ function DrawManager.ClickGUIInit()
                         -- Freeze toggle to prevent physics interference during rotation
                         ClickGUI.RenderFeature(Utils.Joaat("Spooner_FreezeSelectedEntity"))
                         ClickGUI.RenderFeature(Utils.Joaat("Spooner_DynamicEntity"))
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_GodModeEntity"))
                         ImGui.Spacing()
 
                         ImGui.Text("Position")
@@ -2428,6 +2430,39 @@ function Spooner.UpdateDynamicToggleForEntity(entity)
         local isToggled = dynamicEntityFeature:IsToggled()
         if isDynamic ~= isToggled and not isRunningDynamic then
             dynamicEntityFeature:Toggle(isDynamic)
+        end
+    end
+end
+
+local isRunningGodMode = false
+
+local godModeEntityFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_GodModeEntity"),
+    "God Mode",
+    eFeatureType.Toggle,
+    "Make entity invincible",
+    function(f)
+        isRunningGodMode = true
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            Script.QueueJob(function()
+                Spooner.TakeControlOfEntity(entity)
+                local godMode = f:IsToggled()
+                ENTITY.SET_ENTITY_INVINCIBLE(entity, godMode)
+                ENTITY.SET_ENTITY_CAN_BE_DAMAGED(entity, not godMode)
+                isRunningGodMode = false
+            end)
+        end
+    end
+)
+
+-- Helper function to update god mode toggle when selecting a new entity
+function Spooner.UpdateGodModeToggleForEntity(entity)
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        local isInvincible = ENTITY.GET_ENTITY_CAN_BE_DAMAGED(entity) == false
+        local isToggled = godModeEntityFeature:IsToggled()
+        if isInvincible ~= isToggled and not isRunningGodMode then
+            godModeEntityFeature:Toggle(isInvincible)
         end
     end
 end
