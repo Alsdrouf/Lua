@@ -42,7 +42,7 @@ local SpoonerUtils = LoadLib("SpoonerUtils")
 -- Constants
 -- ============================================================================
 local CONSTANTS = {
-    NATIVES_URL = "https://raw.githubusercontent.com/Elfish-beaker/object-list/refs/heads/main/natives.lua",
+    NATIVES_URL = "https://raw.githubusercontent.com/Alsdrouf/CheraxSpooner/refs/heads/main/Spooner/Assets/natives.lua",
     NETWORK_TIMEOUT = 1500,
     NETWORK_TIMEOUT_SHORT = 25,
     RAYCAST_MAX_DISTANCE = 1000.0,
