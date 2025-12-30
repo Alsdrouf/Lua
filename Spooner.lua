@@ -1830,9 +1830,11 @@ function DrawManager.ClickGUIInit()
                                     local label = DrawManager.GetEntityName(item.entity)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
-                                        Spooner.selectedEntityIndex = item.index
-                                        Spooner.UpdateSelectedEntityBlip()
-                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                        Script.QueueJob(function()
+                                            Spooner.selectedEntityIndex = item.index
+                                            Spooner.UpdateSelectedEntityBlip()
+                                            Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                        end)
                                     end
                                 end
                             end
@@ -1849,7 +1851,9 @@ function DrawManager.ClickGUIInit()
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
-                                        Spooner.UpdateSelectedEntityBlip()
+                                        Script.QueueJob(function()
+                                            Spooner.UpdateSelectedEntityBlip()
+                                        end)
                                         Spooner.UpdateFreezeToggleForEntity(item.entity)
                                     end
                                 end
@@ -1866,9 +1870,11 @@ function DrawManager.ClickGUIInit()
                                     local label = DrawManager.GetEntityName(item.entity)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
-                                        Spooner.selectedEntityIndex = item.index
-                                        Spooner.UpdateSelectedEntityBlip()
-                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                        Script.QueueJob(function()
+                                            Spooner.selectedEntityIndex = item.index
+                                            Spooner.UpdateSelectedEntityBlip()
+                                            Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                        end)
                                     end
                                 end
                             end
@@ -1893,11 +1899,7 @@ function DrawManager.ClickGUIInit()
                     end
 
                     -- Save button
-                    if ImGui.Button("Save Database to XML") then
-                        Script.QueueJob(function()
-                            Spooner.SaveDatabaseToXML(Spooner.saveFileName)
-                        end)
-                    end
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_SaveDatabaseToXML"))
 
                     ClickGUI.EndCustomChildWindow()
                 end
@@ -1991,48 +1993,9 @@ function DrawManager.ClickGUIInit()
                         ImGui.Spacing()
                         ImGui.Separator()
 
-                        -- Teleport to entity button
-                        if ImGui.Button("Teleport to Entity") then
-                            Script.QueueJob(function()
-                                local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
-                                if Spooner.inSpoonerMode and Spooner.freecam then
-                                    CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
-                                else
-                                    local playerPed = PLAYER.PLAYER_PED_ID()
-                                    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
-                                end
-                            end)
-                        end
-
-                        ImGui.SameLine()
-
-                        -- Teleport entity to camera/player button
-                        if ImGui.Button("Teleport Entity Here") then
-                            Script.QueueJob(function()
-                                Spooner.TakeControlOfEntity(entity)
-                                local targetPos
-                                if Spooner.inSpoonerMode and Spooner.freecam then
-                                    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
-                                    local fwd = CameraUtils.GetBasis(Spooner.freecam)
-                                    targetPos = {
-                                        x = camPos.x + fwd.x * 5.0,
-                                        y = camPos.y + fwd.y * 5.0,
-                                        z = camPos.z + fwd.z * 5.0
-                                    }
-                                else
-                                    local playerPed = PLAYER.PLAYER_PED_ID()
-                                    local playerPos = ENTITY.GET_ENTITY_COORDS(playerPed, true)
-                                    local playerHeading = ENTITY.GET_ENTITY_HEADING(playerPed)
-                                    local rad = math.rad(playerHeading)
-                                    targetPos = {
-                                        x = playerPos.x - math.sin(rad) * 5.0,
-                                        y = playerPos.y + math.cos(rad) * 5.0,
-                                        z = playerPos.z
-                                    }
-                                end
-                                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
-                            end)
-                        end
+                        -- Teleport buttons
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_TeleportToEntity"))
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_TeleportEntityHere"))
 
                         -- Delete button
                         ImGui.Spacing()
@@ -2042,35 +2005,9 @@ function DrawManager.ClickGUIInit()
                         -- Add/Remove from database button
                         ImGui.Spacing()
                         if not isInDatabase then
-                            if ImGui.Button("Add to Database") then
-                                local entityToAdd = entity  -- Capture entity for closure
-                                -- Update state before QueueJob
-                                table.insert(Spooner.managedEntities, entityToAdd)
-                                Spooner.selectedEntityIndex = #Spooner.managedEntities
-                                Spooner.quickEditEntity = nil  -- Clear quick edit since it's now in database
-                                Spooner.UpdateSelectedEntityBlip()
-                                Script.QueueJob(function()
-                                    NetworkUtils.MakeEntityNetworked(entityToAdd)
-                                    Spooner.TakeControlOfEntity(entityToAdd)
-                                    GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
-                                end)
-                            end
+                            ClickGUI.RenderFeature(Utils.Joaat("Spooner_AddToDatabase"))
                         else
-                            if ImGui.Button("Remove from Database") then
-                                local entityToRemove = entity  -- Capture entity for closure
-                                -- Update state before QueueJob
-                                for i, managedEntity in ipairs(Spooner.managedEntities) do
-                                    if managedEntity == entityToRemove then
-                                        table.remove(Spooner.managedEntities, i)
-                                        break
-                                    end
-                                end
-                                -- Switch to quick edit mode to keep editing
-                                Spooner.quickEditEntity = entityToRemove
-                                Spooner.selectedEntityIndex = 0
-                                Spooner.UpdateSelectedEntityBlip()
-                                GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
-                            end
+                            ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveEntity"))
                         end
                     else
                         ImGui.Text("No entity selected")
@@ -2318,26 +2255,9 @@ function DrawManager.ClickGUIInit()
                         local selectedDisplayName = Spooner.selectedXMLFile:gsub(spoonerSavePath .. "\\", ""):gsub(".xml$", "")
                         ImGui.Text("Selected: " .. selectedDisplayName)
 
-                        -- Load button
-                        if ImGui.Button("Load") then
-                            Script.QueueJob(function()
-                                Spooner.LoadDatabaseFromXML(Spooner.selectedXMLFile)
-                            end)
-                        end
-
-                        ImGui.SameLine()
-
-                        -- Delete button
-                        if ImGui.Button("Delete") then
-                            Script.QueueJob(function()
-                                if FileMgr.DeleteFile(Spooner.selectedXMLFile) then
-                                    GUI.AddToast("Spooner", "Deleted: " .. selectedDisplayName, 2000, eToastPos.BOTTOM_RIGHT)
-                                    Spooner.selectedXMLFile = nil
-                                else
-                                    GUI.AddToast("Spooner", "Failed to delete file", 2000, eToastPos.BOTTOM_RIGHT)
-                                end
-                            end)
-                        end
+                        -- Load and Delete buttons
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_LoadSelectedXML"))
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteSelectedXML"))
                     else
                         ImGui.Text("No file selected")
                     end
@@ -2380,14 +2300,24 @@ local toggleSpoonerModeFeature = FeatureMgr.AddFeature(
 
 FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_RemoveEntity"),
-    "Remove from List",
+    "Remove from Database",
     eFeatureType.Button,
-    "Remove selected entity from tracking",
+    "Remove selected entity from database",
     function(f)
-        if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-            table.remove(Spooner.managedEntities, Spooner.selectedEntityIndex)
+        local entity, isInDatabase = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) and isInDatabase then
+            for i, managedEntity in ipairs(Spooner.managedEntities) do
+                if managedEntity == entity then
+                    table.remove(Spooner.managedEntities, i)
+                    break
+                end
+            end
+            Spooner.quickEditEntity = entity
+            Spooner.selectedEntityIndex = 0
+            Spooner.UpdateSelectedEntityBlip()
+            GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
         else
-            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
+            GUI.AddToast("Spooner", "No valid entity in database selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
     end
 )
@@ -2521,9 +2451,10 @@ FeatureMgr.AddFeature(
                 end
             end
             Spooner.selectedEntityIndex = 0
-            Spooner.UpdateSelectedEntityBlip()
 
             Script.QueueJob(function()
+                Spooner.UpdateSelectedEntityBlip()
+
                 local netId = Spooner.TakeControlOfEntity(entity)
 
                 local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
@@ -2546,6 +2477,148 @@ FeatureMgr.AddFeature(
             end)
         else
             GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
+        end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_SaveDatabaseToXML"),
+    "Save Database to XML",
+    eFeatureType.Button,
+    "Save all entities in database to XML file",
+    function(f)
+        Script.QueueJob(function()
+            Spooner.SaveDatabaseToXML(Spooner.saveFileName)
+        end)
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_TeleportToEntity"),
+    "Teleport to Entity",
+    eFeatureType.Button,
+    "Teleport to the selected entity",
+    function(f)
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            Script.QueueJob(function()
+                local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
+                if Spooner.inSpoonerMode and Spooner.freecam then
+                    CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
+                else
+                    local playerPed = PLAYER.PLAYER_PED_ID()
+                    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
+                end
+            end)
+        else
+            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
+        end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_TeleportEntityHere"),
+    "Teleport Entity Here",
+    eFeatureType.Button,
+    "Teleport the selected entity to camera/player position",
+    function(f)
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            Script.QueueJob(function()
+                Spooner.TakeControlOfEntity(entity)
+                local targetPos
+                if Spooner.inSpoonerMode and Spooner.freecam then
+                    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+                    local fwd = CameraUtils.GetBasis(Spooner.freecam)
+                    targetPos = {
+                        x = camPos.x + fwd.x * 5.0,
+                        y = camPos.y + fwd.y * 5.0,
+                        z = camPos.z + fwd.z * 5.0
+                    }
+                else
+                    local playerPed = PLAYER.PLAYER_PED_ID()
+                    local playerPos = ENTITY.GET_ENTITY_COORDS(playerPed, true)
+                    local playerHeading = ENTITY.GET_ENTITY_HEADING(playerPed)
+                    local rad = math.rad(playerHeading)
+                    targetPos = {
+                        x = playerPos.x - math.sin(rad) * 5.0,
+                        y = playerPos.y + math.cos(rad) * 5.0,
+                        z = playerPos.z
+                    }
+                end
+                ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
+            end)
+        else
+            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
+        end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_AddToDatabase"),
+    "Add to Database",
+    eFeatureType.Button,
+    "Add the selected entity to the database",
+    function(f)
+        local entity = Spooner.GetEditingEntity()
+        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+            -- Check if already in database
+            for _, managedEntity in ipairs(Spooner.managedEntities) do
+                if managedEntity == entity then
+                    GUI.AddToast("Spooner", "Entity already in database", 2000, eToastPos.BOTTOM_RIGHT)
+                    return
+                end
+            end
+            -- Add to database
+            table.insert(Spooner.managedEntities, entity)
+            Spooner.selectedEntityIndex = #Spooner.managedEntities
+            Spooner.quickEditEntity = nil
+            Script.QueueJob(function()
+                Spooner.UpdateSelectedEntityBlip()
+                NetworkUtils.MakeEntityNetworked(entity)
+                Spooner.TakeControlOfEntity(entity)
+                GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
+            end)
+        else
+            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
+        end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_LoadSelectedXML"),
+    "Load XML",
+    eFeatureType.Button,
+    "Load the selected XML file",
+    function(f)
+        if Spooner.selectedXMLFile then
+            Script.QueueJob(function()
+                Spooner.LoadDatabaseFromXML(Spooner.selectedXMLFile)
+            end)
+        else
+            GUI.AddToast("Spooner", "No XML file selected", 2000, eToastPos.BOTTOM_RIGHT)
+        end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_DeleteSelectedXML"),
+    "Delete XML",
+    eFeatureType.Button,
+    "Delete the selected XML file",
+    function(f)
+        if Spooner.selectedXMLFile then
+            local selectedDisplayName = Spooner.selectedXMLFile:match("([^\\]+)%.xml$") or Spooner.selectedXMLFile
+            Script.QueueJob(function()
+                if FileMgr.DeleteFile(Spooner.selectedXMLFile) then
+                    GUI.AddToast("Spooner", "Deleted: " .. selectedDisplayName, 2000, eToastPos.BOTTOM_RIGHT)
+                    Spooner.selectedXMLFile = nil
+                else
+                    GUI.AddToast("Spooner", "Failed to delete file", 2000, eToastPos.BOTTOM_RIGHT)
+                end
+            end)
+        else
+            GUI.AddToast("Spooner", "No XML file selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
     end
 )
