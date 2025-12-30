@@ -1195,7 +1195,7 @@ end
 function Spooner.isEntityDynamic(entity)
     local isDynamic = false
     local pEntity = GTA.HandleToPointer(entity)
-    if pEntity and pEntity.IsDynamic then
+    if pEntity and pEntity.IsDynamic and not pEntity.IsFixed then
         isDynamic = true
     end
     return isDynamic
@@ -2320,7 +2320,9 @@ FeatureMgr.AddFeature(
 )
 
 local isRunningFreeze = false
+local isRunningDynamic = false
 
+local dynamicEntityFeature
 local freezeEntityFeature = FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_FreezeSelectedEntity"),
     "Freeze Entity",
@@ -2343,6 +2345,10 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
                     ENTITY.APPLY_FORCE_TO_ENTITY(entity, 1, 0.0, 0.0, -0.5, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
                 end
 
+                if not isRunningDynamic then
+                    dynamicEntityFeature:Toggle(not frozen)
+                end
+
                 isRunningFreeze = false
             end)
         end
@@ -2360,9 +2366,7 @@ function Spooner.UpdateFreezeToggleForEntity(entity)
     end
 end
 
-local isRunningDynamic = false
-
-local dynamicEntityFeature = FeatureMgr.AddFeature(
+dynamicEntityFeature = FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_DynamicEntity"),
     "Dynamic",
     eFeatureType.Toggle,
@@ -2375,6 +2379,11 @@ local dynamicEntityFeature = FeatureMgr.AddFeature(
                 Spooner.TakeControlOfEntity(entity)
                 local dynamic = f:IsToggled()
                 ENTITY.SET_ENTITY_DYNAMIC(entity, dynamic)
+
+                if not isRunningFreeze then
+                    freezeEntityFeature:Toggle(not dynamic)
+                end
+
                 isRunningDynamic = false 
             end)
         end
