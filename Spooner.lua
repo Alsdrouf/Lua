@@ -43,6 +43,9 @@ local SpoonerUtils = LoadLib("SpoonerUtils")
 -- ============================================================================
 local CONSTANTS = {
     NATIVES_URL = "https://raw.githubusercontent.com/Alsdrouf/CheraxSpooner/refs/heads/main/Spooner/Assets/natives.lua",
+    PED_LIST_URL = "https://raw.githubusercontent.com/Alsdrouf/CheraxSpooner/refs/heads/main/Spooner/Assets/PedList.xml",
+    PROP_LIST_URL = "https://raw.githubusercontent.com/Alsdrouf/CheraxSpooner/refs/heads/main/Spooner/Assets/PropList.xml",
+    VEHICLE_LIST_URL = "https://raw.githubusercontent.com/Alsdrouf/CheraxSpooner/refs/heads/main/Spooner/Assets/VehicleList.xml",
     NETWORK_TIMEOUT = 1500,
     NETWORK_TIMEOUT_SHORT = 25,
     RAYCAST_MAX_DISTANCE = 1000.0,
@@ -72,7 +75,7 @@ local MemoryUtils = MemoryUtilsLib.New()
 -- ============================================================================
 -- Utilities
 -- ============================================================================
-local function DownloadAndSaveLuaFile(url, filePath)
+local function DownloadAndSaveFile(url, filePath)
     local curlObject = Curl.Easy()
     curlObject:Setopt(eCurlOption.CURLOPT_URL, url)
     curlObject:AddHeader("User-Agent: Lua-Curl-Client")
@@ -107,7 +110,7 @@ end
 local function LoadNatives(path)
     if not FileMgr.DoesFileExist(path) then
         Logger.LogInfo("natives.lua not found. Downloading...")
-        if not DownloadAndSaveLuaFile(CONSTANTS.NATIVES_URL, path) then
+        if not DownloadAndSaveFile(CONSTANTS.NATIVES_URL, path) then
             return false
         end
     end
@@ -122,6 +125,25 @@ local function LoadNatives(path)
 end
 
 LoadNatives(nativesPath)
+
+local function DownloadAssetLists()
+    if not FileMgr.DoesFileExist(pedListPath) then
+        Logger.LogInfo("PedList.xml not found. Downloading...")
+        DownloadAndSaveFile(CONSTANTS.PED_LIST_URL, pedListPath)
+    end
+
+    if not FileMgr.DoesFileExist(propListPath) then
+        Logger.LogInfo("PropList.xml not found. Downloading...")
+        DownloadAndSaveFile(CONSTANTS.PROP_LIST_URL, propListPath)
+    end
+
+    if not FileMgr.DoesFileExist(vehicleListPath) then
+        Logger.LogInfo("VehicleList.xml not found. Downloading...")
+        DownloadAndSaveFile(CONSTANTS.VEHICLE_LIST_URL, vehicleListPath)
+    end
+end
+
+DownloadAssetLists()
 
 -- ============================================================================
 -- Initialize Libraries (after natives)
