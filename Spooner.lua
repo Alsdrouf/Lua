@@ -2270,10 +2270,7 @@ function DrawManager.ClickGUIInit()
                     ImGui.TextWrapped(spoonerSavePath)
 
                     -- Refresh button
-                    if ImGui.Button("Refresh") then
-                        -- Force refresh by just triggering a re-render (list is fetched each frame)
-                        GUI.AddToast("Spooner", "File list refreshed", 1000, eToastPos.BOTTOM_RIGHT)
-                    end
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_RefreshXMLList"))
 
                     ClickGUI.EndCustomChildWindow()
                 end
@@ -2620,6 +2617,16 @@ FeatureMgr.AddFeature(
         else
             GUI.AddToast("Spooner", "No XML file selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_RefreshXMLList"),
+    "Refresh",
+    eFeatureType.Button,
+    "Refresh the XML file list",
+    function(f)
+        GUI.AddToast("Spooner", "File list refreshed", 1000, eToastPos.BOTTOM_RIGHT)
     end
 )
 
