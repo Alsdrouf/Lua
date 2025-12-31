@@ -247,6 +247,11 @@ Spooner.saveFileName = "MyPlacements"  -- Default save file name
 Spooner.selectedXMLFile = nil  -- Selected XML file path for loading/deleting
 Spooner.pendingTabSwitch = nil  -- Tab to switch to (set by right-click selection)
 Spooner.quickEditEntity = nil  -- Entity selected for quick editing (not necessarily in database)
+-- Follow player mode
+Spooner.followPlayerEnabled = false
+Spooner.followPlayerId = nil
+Spooner.followOffset = nil  -- Offset from player position when follow started
+Spooner.lastFollowPlayerPos = nil  -- Last known player position to track movement
 
 function Spooner.TakeControlOfEntity(entity)
     return NetworkUtils.MaintainNetworkControlV2(entity)
@@ -295,6 +300,75 @@ end
 
 function Spooner.ShouldLockMovement()
     return GUI.IsOpen() and (Spooner.lockMovementWhileMenuIsOpen or (Spooner.lockMovementWhileMenuIsOpenEnhanced and (ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow) or ImGui.IsAnyItemHovered())))
+end
+
+function Spooner.StartFollowingPlayer(playerId)
+    if not Spooner.freecam then
+        return false
+    end
+
+    local cPed = Players.GetCPed(playerId)
+    if not cPed then
+        return false
+    end
+
+    local camPos = CAM.GET_CAM_COORD(Spooner.freecam)
+    local playerPos = cPed.Position
+
+    -- Store the offset from player to camera
+    Spooner.followOffset = {
+        x = camPos.x - playerPos.x,
+        y = camPos.y - playerPos.y,
+        z = camPos.z - playerPos.z
+    }
+    Spooner.lastFollowPlayerPos = {
+        x = playerPos.x,
+        y = playerPos.y,
+        z = playerPos.z
+    }
+    Spooner.followPlayerId = playerId
+    Spooner.followPlayerEnabled = true
+
+    CustomLogger.Info("Now following player: " .. Players.GetName(playerId))
+    return true
+end
+
+function Spooner.StopFollowingPlayer()
+    Spooner.followPlayerEnabled = false
+    Spooner.followPlayerId = nil
+    Spooner.followOffset = nil
+    Spooner.lastFollowPlayerPos = nil
+    CustomLogger.Info("Stopped following player")
+end
+
+function Spooner.GetFollowPlayerDelta()
+    if not Spooner.followPlayerEnabled or not Spooner.followPlayerId then
+        return nil
+    end
+
+    local cPed = Players.GetCPed(Spooner.followPlayerId)
+    if not cPed then
+        Spooner.StopFollowingPlayer()
+        return nil
+    end
+
+    local playerPos = cPed.Position
+
+    -- Calculate how much the player moved since last frame
+    local delta = {
+        x = playerPos.x - Spooner.lastFollowPlayerPos.x,
+        y = playerPos.y - Spooner.lastFollowPlayerPos.y,
+        z = playerPos.z - Spooner.lastFollowPlayerPos.z
+    }
+
+    -- Update last known position
+    Spooner.lastFollowPlayerPos = {
+        x = playerPos.x,
+        y = playerPos.y,
+        z = playerPos.z
+    }
+
+    return delta
 end
 
 function Spooner.GetGroundZAtPosition(x, y, z)
@@ -525,9 +599,11 @@ function Spooner.UpdateFreecam()
     local rightAxisX = PAD.GET_DISABLED_CONTROL_NORMAL(0, 220)
     local rightAxisY = PAD.GET_DISABLED_CONTROL_NORMAL(0, 221)
 
-    camRot.z = camRot.z - (rightAxisX * Spooner.camRotSpeed)
-    camRot.x = CameraUtils.ClampPitch(camRot.x - (rightAxisY * Spooner.camRotSpeed))
-    camRot.y = 0.0
+    if not Spooner.ShouldLockMovement() then
+        camRot.z = camRot.z - (rightAxisX * Spooner.camRotSpeed)
+        camRot.x = CameraUtils.ClampPitch(camRot.x - (rightAxisY * Spooner.camRotSpeed))
+        camRot.y = 0.0
+    end
 
     local radZ = math.rad(camRot.z)
     local radX = math.rad(camRot.x)
@@ -550,17 +626,26 @@ function Spooner.UpdateFreecam()
         speed = speed * CONSTANTS.CAMERA_SPEED_BOOST
     end
 
-    camPos.x = camPos.x + (forwardX * (moveForward - moveBackward) * speed)
-    camPos.y = camPos.y + (forwardY * (moveForward - moveBackward) * speed)
-    camPos.z = camPos.z + (forwardZ * (moveForward - moveBackward) * speed)
-    camPos.x = camPos.x + (rightX * (moveRight - moveLeft) * speed)
-    camPos.y = camPos.y + (rightY * (moveRight - moveLeft) * speed)
-    camPos.z = camPos.z + ((moveUp - moveDown) * speed)
-
-    if not Spooner.ShouldLockMovement() then
-        CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
-        CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
+    -- Apply follow player movement delta first
+    local followDelta = Spooner.GetFollowPlayerDelta()
+    if followDelta then
+        camPos.x = camPos.x + followDelta.x
+        camPos.y = camPos.y + followDelta.y
+        camPos.z = camPos.z + followDelta.z
     end
+
+    -- Then apply manual movement on top
+    if not Spooner.ShouldLockMovement() then
+        camPos.x = camPos.x + (forwardX * (moveForward - moveBackward) * speed)
+        camPos.y = camPos.y + (forwardY * (moveForward - moveBackward) * speed)
+        camPos.z = camPos.z + (forwardZ * (moveForward - moveBackward) * speed)
+        camPos.x = camPos.x + (rightX * (moveRight - moveLeft) * speed)
+        camPos.y = camPos.y + (rightY * (moveRight - moveLeft) * speed)
+        camPos.z = camPos.z + ((moveUp - moveDown) * speed)
+    end
+
+    CAM.SET_CAM_COORD(Spooner.freecam, camPos.x, camPos.y, camPos.z)
+    CAM.SET_CAM_ROT(Spooner.freecam, camRot.x, camRot.y, camRot.z, 2)
 
     STREAMING.SET_FOCUS_POS_AND_VEL(camPos.x, camPos.y, camPos.z, 0.0, 0.0, 0.0)
     HUD.LOCK_MINIMAP_POSITION(camPos.x, camPos.y)
@@ -624,6 +709,11 @@ function Spooner.ToggleSpoonerMode(f)
                 Memory.WriteInt(ptr, Spooner.freecamBlip)
                 HUD.REMOVE_BLIP(ptr)
                 Spooner.freecamBlip = nil
+            end
+
+            -- Stop following player if active
+            if Spooner.followPlayerEnabled then
+                Spooner.StopFollowingPlayer()
             end
 
             -- Remove selected entity blip
@@ -1802,6 +1892,7 @@ end
 function DrawManager.ClickGUIInit()
     ClickGUI.AddPlayerTab(pluginName, function()
         ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableAtPlayer"))
+        ClickGUI.RenderFeature(Utils.Joaat("Spooner_FollowPlayer"))
     end)
 
     ClickGUI.AddTab(pluginName, function()
@@ -2751,6 +2842,32 @@ FeatureMgr.AddFeature(Utils.Joaat("Spooner_EnableAtPlayer"), "Enable spooner at"
         CAM.SET_CAM_COORD(Spooner.freecam, cPed.Position.x, cPed.Position.y, cPed.Position.z)
     end)
 end)
+
+local followPlayerFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_FollowPlayer"),
+    "Follow player",
+    eFeatureType.Toggle,
+    "Follow the selected player with an offset. Camera moves when player moves, but you can still move freely.",
+    function(f)
+        Script.QueueJob(function()
+            if f:IsToggled() then
+                if not Spooner.inSpoonerMode then
+                    toggleSpoonerModeFeature:Toggle()
+                end
+                local playerId = Utils.GetSelectedPlayer()
+                if not Spooner.StartFollowingPlayer(playerId) then
+                    f:Toggle() -- Disable if failed
+                    GUI.AddToast("Spooner", "Failed to follow player", 2000, eToastPos.BOTTOM_RIGHT)
+                else
+                    GUI.AddToast("Spooner", "Following " .. Players.GetName(playerId), 2000, eToastPos.BOTTOM_RIGHT)
+                end
+            else
+                Spooner.StopFollowingPlayer()
+                GUI.AddToast("Spooner", "Stopped following player", 2000, eToastPos.BOTTOM_RIGHT)
+            end
+        end)
+    end
+)
 
 -- ============================================================================
 -- Initialization
