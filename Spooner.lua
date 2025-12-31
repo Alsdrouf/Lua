@@ -2404,7 +2404,9 @@ local toggleSpoonerModeFeature = FeatureMgr.AddFeature(
     eFeatureType.Toggle,
     "Toggle Spooner Mode",
     function(f)
-        Spooner.ToggleSpoonerMode(f:IsToggled())
+        Script.QueueJob(function()
+            Spooner.ToggleSpoonerMode(f:IsToggled())
+        end)
     end
 )
 
@@ -2951,9 +2953,7 @@ end)
 
 EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
     if Spooner.inSpoonerMode then
-        Script.QueueJob(function()
-            toggleSpoonerModeFeature:Toggle()
-        end)
+        toggleSpoonerModeFeature:Toggle()
     end
     -- Free all cached memory allocations
     MemoryUtils.FreeAll()
