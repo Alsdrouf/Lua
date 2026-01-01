@@ -2011,7 +2011,7 @@ function DrawManager.ClickGUIInit()
 
                     if ImGui.BeginTabBar("DatabaseTabs", 0) then
                         -- Vehicles Tab
-                        if ImGui.BeginTabItem("Vehicles (" .. #vehicles .. ")") then
+                        if ImGui.BeginTabItem("Vehicles (" .. #vehicles .. ")###VehiclesTab") then
                             if #vehicles == 0 then
                                 ImGui.Text("No vehicles in database")
                             else
@@ -2031,7 +2031,7 @@ function DrawManager.ClickGUIInit()
                         end
 
                         -- Peds Tab
-                        if ImGui.BeginTabItem("Peds (" .. #peds .. ")") then
+                        if ImGui.BeginTabItem("Peds (" .. #peds .. ")###PedsTab") then
                             if #peds == 0 then
                                 ImGui.Text("No peds in database")
                             else
@@ -2051,7 +2051,7 @@ function DrawManager.ClickGUIInit()
                         end
 
                         -- Props Tab
-                        if ImGui.BeginTabItem("Props (" .. #props .. ")") then
+                        if ImGui.BeginTabItem("Props (" .. #props .. ")###PropsTab") then
                             if #props == 0 then
                                 ImGui.Text("No props in database")
                             else
@@ -2067,6 +2067,15 @@ function DrawManager.ClickGUIInit()
                                     end
                                 end
                             end
+                            ImGui.EndTabItem()
+                        end
+
+                        -- All Tab
+                        local totalCount = #Spooner.managedEntities
+                        if ImGui.BeginTabItem("All (" .. totalCount .. ")###AllTab") then
+                            ImGui.Spacing()
+                            ClickGUI.RenderFeature(Utils.Joaat("Spooner_RemoveAll"))
+                            ClickGUI.RenderFeature(Utils.Joaat("Spooner_DeleteAll"))
                             ImGui.EndTabItem()
                         end
 
@@ -2509,6 +2518,53 @@ FeatureMgr.AddFeature(
                 GUI.AddToast("Spooner", "Entity removed from database", 1500)
             else
                 GUI.AddToast("Spooner", "No valid entity in database selected", 2000)
+            end
+        end)
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_RemoveAll"),
+    "Remove All",
+    eFeatureType.Button,
+    "Remove all entities from database (keeps entities in game)",
+    function(f)
+        Script.QueueJob(function()
+            local count = #Spooner.managedEntities
+            if count > 0 then
+                Spooner.managedEntities = {}
+                Spooner.quickEditEntity = nil
+                Spooner.selectedEntityIndex = 0
+                Spooner.UpdateSelectedEntityBlip()
+                GUI.AddToast("Spooner", "Removed " .. count .. " entities from database", 2000)
+            else
+                GUI.AddToast("Spooner", "Database is empty", 1500)
+            end
+        end)
+    end
+)
+
+FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_DeleteAll"),
+    "Delete All",
+    eFeatureType.Button,
+    "Delete all entities from database and game",
+    function(f)
+        Script.QueueJob(function()
+            local count = #Spooner.managedEntities
+            if count > 0 then
+                for _, managed in ipairs(Spooner.managedEntities) do
+                    if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
+                        Spooner.DeleteEntity(managed.entity)
+                    end
+                end
+                Spooner.managedEntities = {}
+                Spooner.quickEditEntity = nil
+                Spooner.selectedEntityIndex = 0
+                Spooner.UpdateSelectedEntityBlip()
+                GUI.AddToast("Spooner", "Deleted " .. count .. " entities", 2000)
+            else
+                GUI.AddToast("Spooner", "Database is empty", 1500)
             end
         end)
     end
