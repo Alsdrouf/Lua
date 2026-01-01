@@ -250,7 +250,8 @@ Spooner.previewModelName = nil
 Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 Spooner.saveFileName = "MyPlacements"  -- Default save file name
 Spooner.selectedXMLFile = nil  -- Selected XML file path for loading/deleting
-Spooner.pendingTabSwitch = nil  -- Tab to switch to (set by right-click selection)
+---@alias QuickEditEntity {entity: integer, networkId: integer, networked: boolean}
+---@type QuickEditEntity
 Spooner.quickEditEntity = nil  -- Entity selected for quick editing (not necessarily in database)
 -- Follow player mode
 Spooner.followPlayerEnabled = false
@@ -304,7 +305,7 @@ function Spooner.CalculateGrabOffsets(camPos, entityPos, fwd, right, up)
 end
 
 function Spooner.ShouldLockMovement()
-    return GUI.IsOpen() and (Spooner.lockMovementWhileMenuIsOpen or (Spooner.lockMovementWhileMenuIsOpenEnhanced and (ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow) or ImGui.IsAnyItemHovered())))
+    return GUI.IsOpen() and (Spooner.lockMovementWhileMenuIsOpen or (Spooner.lockMovementWhileMenuIsOpenEnhanced and (ImGui.IsWindowHovered(ImGuiHoveredFlags.AnyWindow) or ImGui.IsAnyItemHovered() or ImGui.IsAnyItemActive())))
 end
 
 function Spooner.StartFollowingPlayer(playerId)
@@ -740,6 +741,8 @@ function Spooner.ToggleSpoonerMode(f)
         HUD.SET_BLIP_COLOUR(Spooner.freecamBlip, 5)    -- Yellow
         HUD.SET_BLIP_SCALE(Spooner.freecamBlip, 0.8)
 
+        Spooner.UpdateSelectedEntityBlip()
+
         CustomLogger.Info("Freecam enabled")
     else
         if Spooner.freecam then
@@ -795,7 +798,7 @@ function Spooner.ToggleEntityInManagedList(entity)
             CustomLogger.Info("Removed entity from managed list: " .. tostring(entity))
             -- If this was the selected entity, switch to quick edit mode
             if Spooner.selectedEntityIndex == i then
-                Spooner.quickEditEntity = entity
+                Spooner.quickEditEntity = managed
                 Spooner.selectedEntityIndex = 0
                 Spooner.UpdateSelectedEntityBlip()
             elseif Spooner.selectedEntityIndex > i then
@@ -829,7 +832,7 @@ function Spooner.ToggleEntityInManagedList(entity)
     CustomLogger.Info("Entity added to managed list: " .. tostring(entity) .. " (netId: " .. tostring(networkId) .. ")")
 
     -- If this entity was the quick edit entity, switch to database selection
-    if Spooner.quickEditEntity == entity then
+    if Spooner.quickEditEntity and Spooner.quickEditEntity.entity == entity then
         Spooner.quickEditEntity = nil
         Spooner.selectedEntityIndex = #Spooner.managedEntities
         Spooner.UpdateSelectedEntityBlip()
@@ -857,27 +860,26 @@ function Spooner.SelectEntityForQuickEdit(entity)
         Spooner.quickEditEntity = nil  -- Clear quick edit
     else
         -- Entity not in database - use quick edit
-        Spooner.quickEditEntity = entity
+        local isNetworked = NetworkUtils.IsEntityNetworked(entity)
+        Spooner.quickEditEntity = {entity = entity, networked = isNetworked, networkId = NetworkUtils.GetNetworkIdOf(entity)}
         Spooner.selectedEntityIndex = 0  -- Clear database selection
     end
-
-    -- Update blip for selected entity
-    Spooner.UpdateSelectedEntityBlip()
 
     -- Update toggles to match entity's current state
     Spooner.UpdateFreezeToggleForEntity(entity)
     Spooner.UpdateDynamicToggleForEntity(entity)
     Spooner.UpdateGodModeToggleForEntity(entity)
+    Spooner.UpdateNetworkedToggleForEntity(entity)
 
-    -- Request tab switch to Database (where Entity Transform is)
-    Spooner.pendingTabSwitch = "Database"
+    -- Update blip for selected entity
+    Spooner.UpdateSelectedEntityBlip()
 
     -- Open the menu if not already open
     if not GUI.IsOpen() then
         GUI.Toggle()
     end
 
-    GUI.AddToast("Spooner", "Entity selected for editing", 1500, eToastPos.BOTTOM_RIGHT)
+    GUI.AddToast("Spooner", "Entity selected for editing", 1500)
     return true
 end
 
@@ -897,8 +899,8 @@ function Spooner.GetEditingEntity()
 
     -- Fall back to quick edit entity
     if Spooner.quickEditEntity then
-        if ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
-            return Spooner.quickEditEntity, false, 0, false  -- entity, isInDatabase, networkId, networked
+        if ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity.entity) then
+            return Spooner.quickEditEntity.entity, false, Spooner.quickEditEntity.networkId, Spooner.quickEditEntity.networked  -- entity, isInDatabase, networkId, networked
         else
             Spooner.quickEditEntity = nil
         end
@@ -931,7 +933,7 @@ function Spooner.ManageEntities()
     local entity, isInDatabase = Spooner.GetEditingEntity()
     -- Also maintain control of quick edit entity if set
     if entity and not isInDatabase then
-        Spooner.TakeControlOfEntity(Spooner.quickEditEntity)
+        Spooner.TakeControlOfEntity(Spooner.quickEditEntity.entity)
     end
 end
 
@@ -1085,7 +1087,7 @@ end
 function Spooner.SaveDatabaseToXML(filename)
     if #Spooner.managedEntities == 0 then
         CustomLogger.Warn("No entities in database to save")
-        GUI.AddToast("Spooner", "No entities in database to save", 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "No entities in database to save", 2000)
         return false
     end
 
@@ -1106,7 +1108,7 @@ function Spooner.SaveDatabaseToXML(filename)
 
     if #placements == 0 then
         CustomLogger.Warn("No valid entities to save")
-        GUI.AddToast("Spooner", "No valid entities to save", 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "No valid entities to save", 2000)
         return false
     end
 
@@ -1123,11 +1125,11 @@ function Spooner.SaveDatabaseToXML(filename)
 
     if FileMgr.WriteFileContent(filePath, xmlContent) then
         CustomLogger.Info("Saved " .. #placements .. " entities to " .. filePath)
-        GUI.AddToast("Spooner", "Saved " .. #placements .. " entities to " .. filename .. ".xml", 3000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "Saved " .. #placements .. " entities to " .. filename .. ".xml", 3000)
         return true
     else
         CustomLogger.Error("Failed to save database to " .. filePath)
-        GUI.AddToast("Spooner", "Failed to save database", 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "Failed to save database", 2000)
         return false
     end
 end
@@ -1273,26 +1275,26 @@ end
 function Spooner.LoadDatabaseFromXML(filePath)
     if not FileMgr.DoesFileExist(filePath) then
         CustomLogger.Error("File not found: " .. filePath)
-        GUI.AddToast("Spooner", "File not found: " .. filePath, 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "File not found: " .. filePath, 2000)
         return false
     end
 
     local xmlContent = FileMgr.ReadFileContent(filePath)
     if not xmlContent or xmlContent == "" then
         CustomLogger.Error("Failed to read file: " .. filePath)
-        GUI.AddToast("Spooner", "Failed to read file", 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "Failed to read file", 2000)
         return false
     end
 
     local parsed = XMLParser.ParseSpoonerXML(xmlContent)
     if not parsed or #parsed.placements == 0 then
         CustomLogger.Warn("No placements found in file")
-        GUI.AddToast("Spooner", "No placements found in file", 2000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "No placements found in file", 2000)
         return false
     end
 
     CustomLogger.Info("Loading " .. #parsed.placements .. " placements from " .. filePath)
-    GUI.AddToast("Spooner", "Loading " .. #parsed.placements .. " placements...", 2000, eToastPos.BOTTOM_RIGHT)
+    GUI.AddToast("Spooner", "Loading " .. #parsed.placements .. " placements...", 2000)
 
     local spawnedEntities = {}
     for _, placement in ipairs(parsed.placements) do
@@ -1315,7 +1317,7 @@ function Spooner.LoadDatabaseFromXML(filePath)
     end
 
     CustomLogger.Info("Loaded " .. #spawnedEntities .. " entities from " .. filePath)
-    GUI.AddToast("Spooner", "Loaded " .. #spawnedEntities .. " entities", 3000, eToastPos.BOTTOM_RIGHT)
+    GUI.AddToast("Spooner", "Loaded " .. #spawnedEntities .. " entities", 3000)
     return true
 end
 
@@ -2017,11 +2019,11 @@ function DrawManager.ClickGUIInit()
                                     local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
-                                        Script.QueueJob(function()
-                                            Spooner.selectedEntityIndex = item.index
-                                            Spooner.UpdateSelectedEntityBlip()
-                                            Spooner.UpdateFreezeToggleForEntity(item.entity)
-                                        end)
+                                        if (not Spooner.quickEditEntity or Spooner.quickEditEntity.entity ~= item.entity) and Spooner.selectedEntityIndex ~= item.index then
+                                            Script.QueueJob(function()
+                                                Spooner.SelectEntityForQuickEdit(item.entity)
+                                            end)
+                                        end
                                     end
                                 end
                             end
@@ -2037,11 +2039,11 @@ function DrawManager.ClickGUIInit()
                                     local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
-                                        Spooner.selectedEntityIndex = item.index
-                                        Script.QueueJob(function()
-                                            Spooner.UpdateSelectedEntityBlip()
-                                        end)
-                                        Spooner.UpdateFreezeToggleForEntity(item.entity)
+                                        if (not Spooner.quickEditEntity or Spooner.quickEditEntity.entity ~= item.entity) and Spooner.selectedEntityIndex ~= item.index then
+                                            Script.QueueJob(function()
+                                                Spooner.SelectEntityForQuickEdit(item.entity)
+                                            end)
+                                        end
                                     end
                                 end
                             end
@@ -2057,11 +2059,11 @@ function DrawManager.ClickGUIInit()
                                     local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
-                                        Script.QueueJob(function()
-                                            Spooner.selectedEntityIndex = item.index
-                                            Spooner.UpdateSelectedEntityBlip()
-                                            Spooner.UpdateFreezeToggleForEntity(item.entity)
-                                        end)
+                                        if (not Spooner.quickEditEntity or Spooner.quickEditEntity.entity ~= item.entity) and Spooner.selectedEntityIndex ~= item.index then
+                                            Script.QueueJob(function()
+                                                Spooner.SelectEntityForQuickEdit(item.entity)
+                                            end)
+                                        end
                                     end
                                 end
                             end
@@ -2111,6 +2113,7 @@ function DrawManager.ClickGUIInit()
                         ClickGUI.RenderFeature(Utils.Joaat("Spooner_FreezeSelectedEntity"))
                         ClickGUI.RenderFeature(Utils.Joaat("Spooner_DynamicEntity"))
                         ClickGUI.RenderFeature(Utils.Joaat("Spooner_GodModeEntity"))
+                        ClickGUI.RenderFeature(Utils.Joaat("Spooner_NetworkedEntity"))
                         ImGui.Spacing()
 
                         ImGui.Text("Position")
@@ -2201,6 +2204,7 @@ function DrawManager.ClickGUIInit()
                         ImGui.Spacing()
                         ImGui.TextWrapped("Select an entity from the database above, or right-click an entity in Spooner mode to edit it.")
                     end
+          
                     ClickGUI.EndCustomChildWindow()
                 end
                 ImGui.EndTabItem()
@@ -2490,21 +2494,23 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Remove selected entity from database",
     function(f)
-        local entity, isInDatabase = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) and isInDatabase then
-            for i, managed in ipairs(Spooner.managedEntities) do
-                if managed.entity == entity then
-                    table.remove(Spooner.managedEntities, i)
-                    break
+        Script.QueueJob(function()
+            local entity, isInDatabase = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) and isInDatabase then
+                for i, managed in ipairs(Spooner.managedEntities) do
+                    if managed.entity == entity then
+                        table.remove(Spooner.managedEntities, i)
+                        Spooner.quickEditEntity = managed
+                        Spooner.selectedEntityIndex = 0
+                        break
+                    end
                 end
+                Spooner.UpdateSelectedEntityBlip()
+                GUI.AddToast("Spooner", "Entity removed from database", 1500)
+            else
+                GUI.AddToast("Spooner", "No valid entity in database selected", 2000)
             end
-            Spooner.quickEditEntity = entity
-            Spooner.selectedEntityIndex = 0
-            Spooner.UpdateSelectedEntityBlip()
-            GUI.AddToast("Spooner", "Entity removed from database", 1500, eToastPos.BOTTOM_RIGHT)
-        else
-            GUI.AddToast("Spooner", "No valid entity in database selected", 2000, eToastPos.BOTTOM_RIGHT)
-        end
+        end)
     end
 )
 
@@ -2519,9 +2525,9 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
     "Freeze entity position",
     function(f)
         isRunningFreeze = true
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            Script.QueueJob(function()
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
                 Spooner.TakeControlOfEntity(entity)
                 local frozen = f:IsToggled()
                 ENTITY.FREEZE_ENTITY_POSITION(entity, frozen)
@@ -2539,8 +2545,8 @@ local freezeEntityFeature = FeatureMgr.AddFeature(
                 end
 
                 isRunningFreeze = false
-            end)
-        end
+            end
+        end)
     end
 )
 
@@ -2562,9 +2568,9 @@ dynamicEntityFeature = FeatureMgr.AddFeature(
     "Toggle entity dynamic state",
     function(f)
         isRunningDynamic = true
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            Script.QueueJob(function()
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
                 Spooner.TakeControlOfEntity(entity)
                 local dynamic = f:IsToggled()
                 ENTITY.SET_ENTITY_DYNAMIC(entity, dynamic)
@@ -2574,8 +2580,8 @@ dynamicEntityFeature = FeatureMgr.AddFeature(
                 end
 
                 isRunningDynamic = false 
-            end)
-        end
+            end
+        end)
     end
 )
 
@@ -2599,16 +2605,16 @@ local godModeEntityFeature = FeatureMgr.AddFeature(
     "Make entity invincible",
     function(f)
         isRunningGodMode = true
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            Script.QueueJob(function()
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
                 Spooner.TakeControlOfEntity(entity)
                 local godMode = f:IsToggled()
                 ENTITY.SET_ENTITY_INVINCIBLE(entity, godMode)
                 ENTITY.SET_ENTITY_CAN_BE_DAMAGED(entity, not godMode)
                 isRunningGodMode = false
-            end)
-        end
+            end
+        end)
     end
 )
 
@@ -2623,39 +2629,91 @@ function Spooner.UpdateGodModeToggleForEntity(entity)
     end
 end
 
+local isRunningNetworked = false
+
+local networkedEntityFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_NetworkedEntity"),
+    "Networked",
+    eFeatureType.Toggle,
+    "Toggle entity networking state",
+    function(f)
+        isRunningNetworked = true
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+                local networkId = 0
+                if f:IsToggled() then
+                    networkId = NetworkUtils.MakeEntityNetworked(entity)
+                    networkId = NetworkUtils.MakeEntityNetworked(entity) -- Why I need to call twice no fucking idea
+                else
+                    local cPhysical = GTA.HandleToPointer(entity)
+                    NetworkObjectMgr.UnregisterNetworkObject(cPhysical.NetObject, 0, true, false)
+                end
+                -- Update the managed entity's networked state
+                for _, managed in ipairs(Spooner.managedEntities) do
+                    if managed.entity == entity then
+                        managed.networked = NetworkUtils.IsEntityNetworked(entity)
+                        managed.networkId = networkId
+                        break
+                    end
+                end
+
+                if Spooner.quickEditEntity and Spooner.quickEditEntity.entity == entity then
+                    Spooner.quickEditEntity.networked = NetworkUtils.IsEntityNetworked(entity)
+                    Spooner.quickEditEntity.networkId = networkId
+                end
+
+                isRunningNetworked = false
+            end
+        end)
+    end
+)
+
+-- Helper function to update networked toggle when selecting a new entity
+function Spooner.UpdateNetworkedToggleForEntity(entity)
+    if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+        local isNetworked = NetworkUtils.IsEntityNetworked(entity)
+        local isToggled = networkedEntityFeature:IsToggled()
+        if isNetworked ~= isToggled and not isRunningNetworked then
+            networkedEntityFeature:Toggle(isNetworked)
+        end
+    end
+end
+
 FeatureMgr.AddFeature(
     Utils.Joaat("Spooner_DeleteEntity"),
     "Delete Entity",
     eFeatureType.Button,
     "Delete selected entity from the game",
     function(f)
-        local entity, isInDatabase = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            CustomLogger.Info("Deleting entity: " .. tostring(entity))
+        Script.QueueJob(function()
+            local entity, isInDatabase = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+                CustomLogger.Info("Deleting entity: " .. tostring(entity))
 
-            -- Clear selection BEFORE QueueJob to prevent UI from accessing deleted entity
-            if Spooner.quickEditEntity == entity then
-                Spooner.quickEditEntity = nil
-            end
-            if isInDatabase then
-                for i, managed in ipairs(Spooner.managedEntities) do
-                    if managed.entity == entity then
-                        table.remove(Spooner.managedEntities, i)
-                        break
+                -- Clear selection BEFORE QueueJob to prevent UI from accessing deleted entity
+                if Spooner.quickEditEntity and Spooner.quickEditEntity.entity == entity then
+                    Spooner.quickEditEntity = nil
+                end
+                if isInDatabase then
+                    for i, managed in ipairs(Spooner.managedEntities) do
+                        if managed.entity == entity then
+                            table.remove(Spooner.managedEntities, i)
+                            break
+                        end
                     end
                 end
+                Spooner.selectedEntityIndex = 0
+
+                    Spooner.DeleteEntity(entity)
+
+                    CustomLogger.Info("Deleted entity: " .. tostring(entity))
+                    GUI.AddToast("Spooner", "Entity deleted", 1500)
+            
+            else
+                GUI.AddToast("Spooner", "No valid entity selected", 2000)
             end
-            Spooner.selectedEntityIndex = 0
-
-            Script.QueueJob(function()
-                Spooner.DeleteEntity(entity)
-
-                CustomLogger.Info("Deleted entity: " .. tostring(entity))
-                GUI.AddToast("Spooner", "Entity deleted", 1500, eToastPos.BOTTOM_RIGHT)
-            end)
-        else
-            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
-        end
+        end)
     end
 )
 
@@ -2677,9 +2735,9 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Teleport to the selected entity",
     function(f)
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            Script.QueueJob(function()
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
                 local entityPos = ENTITY.GET_ENTITY_COORDS(entity, true)
                 if Spooner.inSpoonerMode and Spooner.freecam then
                     CAM.SET_CAM_COORD(Spooner.freecam, entityPos.x, entityPos.y - 5.0, entityPos.z + 2.0)
@@ -2687,10 +2745,10 @@ FeatureMgr.AddFeature(
                     local playerPed = PLAYER.PLAYER_PED_ID()
                     ENTITY.SET_ENTITY_COORDS_NO_OFFSET(playerPed, entityPos.x, entityPos.y, entityPos.z + 1.0, false, false, false)
                 end
-            end)
-        else
-            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
-        end
+            else
+                GUI.AddToast("Spooner", "No valid entity selected", 2000)
+            end
+        end)
     end
 )
 
@@ -2700,9 +2758,9 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Teleport the selected entity to camera/player position",
     function(f)
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            Script.QueueJob(function()
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
                 Spooner.TakeControlOfEntity(entity)
                 local targetPos
                 if Spooner.inSpoonerMode and Spooner.freecam then
@@ -2725,10 +2783,10 @@ FeatureMgr.AddFeature(
                     }
                 end
                 ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, targetPos.x, targetPos.y, targetPos.z, false, false, false)
-            end)
-        else
-            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
-        end
+            else
+                GUI.AddToast("Spooner", "No valid entity selected", 2000)
+            end
+     end)
     end
 )
 
@@ -2738,21 +2796,23 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Add the selected entity to the database",
     function(f)
-        local entity = Spooner.GetEditingEntity()
-        if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
-            -- Check if already in database
-            for _, managed in ipairs(Spooner.managedEntities) do
-                if managed.entity == entity then
-                    GUI.AddToast("Spooner", "Entity already in database", 2000, eToastPos.BOTTOM_RIGHT)
-                    return
+        Script.QueueJob(function()
+            local entity = Spooner.GetEditingEntity()
+            if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
+                -- Check if already in database
+                for _, managed in ipairs(Spooner.managedEntities) do
+                    if managed.entity == entity then
+                        GUI.AddToast("Spooner", "Entity already in database", 2000)
+                        return
+                    end
                 end
+                -- Add to database using same logic as pressing X
+                Spooner.ToggleEntityInManagedList(entity)
+                GUI.AddToast("Spooner", "Entity added to database", 1500)
+            else
+                GUI.AddToast("Spooner", "No valid entity selected", 2000)
             end
-            -- Add to database using same logic as pressing X
-            Spooner.ToggleEntityInManagedList(entity)
-            GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
-        else
-            GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
-        end
+        end)
     end
 )
 
@@ -2767,7 +2827,7 @@ FeatureMgr.AddFeature(
                 Spooner.LoadDatabaseFromXML(Spooner.selectedXMLFile)
             end)
         else
-            GUI.AddToast("Spooner", "No XML file selected", 2000, eToastPos.BOTTOM_RIGHT)
+            GUI.AddToast("Spooner", "No XML file selected", 2000)
         end
     end
 )
@@ -2782,14 +2842,14 @@ FeatureMgr.AddFeature(
             local selectedDisplayName = Spooner.selectedXMLFile:match("([^\\]+)%.xml$") or Spooner.selectedXMLFile
             Script.QueueJob(function()
                 if FileMgr.DeleteFile(Spooner.selectedXMLFile) then
-                    GUI.AddToast("Spooner", "Deleted: " .. selectedDisplayName, 2000, eToastPos.BOTTOM_RIGHT)
+                    GUI.AddToast("Spooner", "Deleted: " .. selectedDisplayName, 2000)
                     Spooner.selectedXMLFile = nil
                 else
-                    GUI.AddToast("Spooner", "Failed to delete file", 2000, eToastPos.BOTTOM_RIGHT)
+                    GUI.AddToast("Spooner", "Failed to delete file", 2000)
                 end
             end)
         else
-            GUI.AddToast("Spooner", "No XML file selected", 2000, eToastPos.BOTTOM_RIGHT)
+            GUI.AddToast("Spooner", "No XML file selected", 2000)
         end
     end
 )
@@ -2800,7 +2860,7 @@ FeatureMgr.AddFeature(
     eFeatureType.Button,
     "Refresh the XML file list",
     function(f)
-        GUI.AddToast("Spooner", "File list refreshed", 1000, eToastPos.BOTTOM_RIGHT)
+        GUI.AddToast("Spooner", "File list refreshed", 1000)
     end
 )
 
@@ -2921,13 +2981,13 @@ local followPlayerFeature = FeatureMgr.AddFeature(
                 local playerId = Utils.GetSelectedPlayer()
                 if not Spooner.StartFollowingPlayer(playerId) then
                     f:Toggle() -- Disable if failed
-                    GUI.AddToast("Spooner", "Failed to follow player", 2000, eToastPos.BOTTOM_RIGHT)
+                    GUI.AddToast("Spooner", "Failed to follow player", 2000)
                 else
-                    GUI.AddToast("Spooner", "Following " .. Players.GetName(playerId), 2000, eToastPos.BOTTOM_RIGHT)
+                    GUI.AddToast("Spooner", "Following " .. Players.GetName(playerId), 2000)
                 end
             else
                 Spooner.StopFollowingPlayer()
-                GUI.AddToast("Spooner", "Stopped following player", 2000, eToastPos.BOTTOM_RIGHT)
+                GUI.AddToast("Spooner", "Stopped following player", 2000)
             end
         end)
     end

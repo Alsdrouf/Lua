@@ -17,6 +17,10 @@ function NetworkUtils.New(CONSTANTS)
         return NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity)
     end
 
+    function self.GetNetworkIdOf(entity)
+        return NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    end
+
     -- Credits GuseXenvious (Probably sainan too)
     function self.set_can_migrate(entity, canMigrate)
         local Pointer = GTA.HandleToPointer(entity):GetAddress()
@@ -41,7 +45,7 @@ function NetworkUtils.New(CONSTANTS)
             NETWORK.NETWORK_REGISTER_ENTITY_AS_NETWORKED(entity)
             Script.Yield(0)
         end
-        return NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        return self.GetNetworkIdOf(entity)
     end
 
     function self.ConstantizeNetworkId(entity)
@@ -108,7 +112,7 @@ function NetworkUtils.New(CONSTANTS)
             return self.MakeEntityNetworked(entity)
         end
 
-        local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        local netId = self.GetNetworkIdOf(entity)
         if not NETWORK.NETWORK_HAS_CONTROL_OF_NETWORK_ID(netId) then
             NETWORK.NETWORK_REQUEST_CONTROL_OF_NETWORK_ID(netId)
         end
@@ -121,7 +125,7 @@ function NetworkUtils.New(CONSTANTS)
             return 0
         end
 
-        local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        local netId = self.GetNetworkIdOf(entity)
         local cPhysical = GTA.HandleToPointer(entity)
         if not cPhysical or not cPhysical.NetObject then return end
         local playerId = GTA.GetLocalPlayerId()
