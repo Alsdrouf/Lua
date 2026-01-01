@@ -229,7 +229,7 @@ Spooner.grabOffsets = nil
 Spooner.grabbedEntityRotation = nil
 Spooner.isGrabbing = false
 Spooner.scaleform = nil
----@alias ManagedEntity {entity: integer, networkId: integer}
+---@alias ManagedEntity {entity: integer, networkId: integer, x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}
 ---@type ManagedEntity[]
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
@@ -808,8 +808,15 @@ function Spooner.ToggleEntityInManagedList(entity)
     NetworkUtils.MakeEntityNetworked(entity)
     Spooner.TakeControlOfEntity(entity)
     local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+    local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
     ---@type ManagedEntity
-    local managedEntry = {entity = entity, networkId = networkId}
+    local managedEntry = {
+        entity = entity,
+        networkId = networkId,
+        x = pos.x, y = pos.y, z = pos.z,
+        rotX = rot.x, rotY = rot.y, rotZ = rot.z
+    }
     table.insert(Spooner.managedEntities, managedEntry)
     CustomLogger.Info("Entity added to managed list: " .. tostring(entity) .. " (netId: " .. tostring(networkId) .. ")")
 
@@ -1261,8 +1268,15 @@ function Spooner.SpawnFromPlacement(placement, skipNetworking)
             NetworkUtils.MakeEntityNetworked(entity)
         end
         local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+        local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
         ---@type ManagedEntity
-        local managedEntry = {entity = entity, networkId = networkId}
+        local managedEntry = {
+            entity = entity,
+            networkId = networkId,
+            x = pos.x, y = pos.y, z = pos.z,
+            rotX = rot.x, rotY = rot.y, rotZ = rot.z
+        }
         table.insert(Spooner.managedEntities, managedEntry)
 
         CustomLogger.Info("Spawned entity: " .. (placement.hashName or placement.modelHash))
@@ -1585,8 +1599,15 @@ function Spawner.ConfirmSpawn()
         end
         NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
         local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
+        local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
+        local rot = ENTITY.GET_ENTITY_ROTATION(Spooner.previewEntity, 2)
         ---@type ManagedEntity
-        local managedEntry = {entity = Spooner.previewEntity, networkId = networkId}
+        local managedEntry = {
+            entity = Spooner.previewEntity,
+            networkId = networkId,
+            x = pos.x, y = pos.y, z = pos.z,
+            rotX = rot.x, rotY = rot.y, rotZ = rot.z
+        }
         table.insert(Spooner.managedEntities, managedEntry)
         CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
         Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
@@ -2727,8 +2748,15 @@ FeatureMgr.AddFeature(
             end
             -- Add to database
             local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+            local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
+            local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
             ---@type ManagedEntity
-            local managedEntry = {entity = entity, networkId = networkId}
+            local managedEntry = {
+                entity = entity,
+                networkId = networkId,
+                x = pos.x, y = pos.y, z = pos.z,
+                rotX = rot.x, rotY = rot.y, rotZ = rot.z
+            }
             table.insert(Spooner.managedEntities, managedEntry)
             Spooner.selectedEntityIndex = #Spooner.managedEntities
             Spooner.quickEditEntity = nil
