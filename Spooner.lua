@@ -247,7 +247,6 @@ Spooner.previewEntity = nil
 Spooner.previewModelHash = nil
 Spooner.previewEntityType = nil  -- "prop", "vehicle", "ped"
 Spooner.previewModelName = nil
-Spooner.pendingPreviewDelete = nil  -- Entity handle pending deletion
 Spooner.saveFileName = "MyPlacements"  -- Default save file name
 Spooner.selectedXMLFile = nil  -- Selected XML file path for loading/deleting
 ---@alias QuickEditEntity {entity: integer, networkId: integer, networked: boolean}
@@ -1367,6 +1366,7 @@ end
 -- Spawner
 -- ============================================================================
 local Spawner = {}
+Spawner.isRunningPreviewSpawn = false
 
 function Spawner.LoadModel(modelHash, timeout)
     timeout = timeout or 5000
@@ -1411,11 +1411,11 @@ function Spawner.SelectEntity(entityType, modelName, modelHash)
         return
     end
 
-    -- Clear existing preview if any, but keep the rotation
-    Spawner.ClearPreview(true, false)
-
     -- Calculate preview distance based on model size
     Script.QueueJob(function()
+        -- Clear existing preview if any, but keep the rotation
+        Spawner.ClearPreview(true, false)
+
         local modelSize = Spawner.GetModelSize(modelHash)
         -- Set preview distance to 1.5x the model diagonal size, with min/max bounds
         local previewDistance = math.max(5.0, math.min(modelSize * 1.5, 50.0))
@@ -1448,7 +1448,7 @@ end
 function Spawner.ClearPreview(keepRotation, keepOffset)
     -- Queue the current preview entity for deletion in the game thread
     if Spooner.previewEntity then
-        Spooner.pendingPreviewDelete = Spooner.previewEntity
+        Spooner.DeleteEntity(Spooner.previewEntity)
     end
     Spooner.previewEntity = nil
     Spooner.previewModelHash = nil
@@ -1463,6 +1463,8 @@ function Spawner.ClearPreview(keepRotation, keepOffset)
 end
 
 function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
+    if Spawner.isRunningPreviewSpawn then return end
+    Spawner.isRunningPreviewSpawn = true
     local entity = nil
 
     if entityType == "prop" then
@@ -1485,6 +1487,8 @@ function Spawner.CreatePreviewEntity(modelHash, entityType, pos)
             TASK.TASK_STAND_STILL(entity, -1)
         end
     end
+
+    Spawner.isRunningPreviewSpawn = false
 
     return entity
 end
@@ -1556,21 +1560,9 @@ function Spawner.GetCrosshairWorldPosition()
 end
 
 function Spawner.UpdatePreview()
-    -- Handle pending entity deletion (from UI thread selection)
-    if Spooner.pendingPreviewDelete then
-        if ENTITY.DOES_ENTITY_EXIST(Spooner.pendingPreviewDelete) then
-            local ptr = MemoryUtils.AllocInt("previewDeletePtr")
-            Memory.WriteInt(ptr, Spooner.pendingPreviewDelete)
-            ENTITY.DELETE_ENTITY(ptr)
-        end
-        Spooner.pendingPreviewDelete = nil
-    end
-
     if not Spooner.inSpoonerMode or not Spooner.previewModelHash then
         if Spooner.previewEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.previewEntity) then
-            local ptr = MemoryUtils.AllocInt("previewEntityPtr")
-            Memory.WriteInt(ptr, Spooner.previewEntity)
-            ENTITY.DELETE_ENTITY(ptr)
+            Spooner.DeleteEntity(Spooner.previewEntity)
             Spooner.previewEntity = nil
         end
         return
