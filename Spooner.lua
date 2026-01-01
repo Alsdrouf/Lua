@@ -166,6 +166,7 @@ local Config = {
     lockMovementWhileMenuIsOpen = false,
     lockMovementWhileMenuIsOpenEnhanced = false,
     positionStep = CONSTANTS.POSITION_STEP_DEFAULT,
+    spawnUnnetworked = false,
 }
 
 local function SaveConfig()
@@ -175,7 +176,8 @@ local function SaveConfig()
         clipToGround = Config.clipToGround,
         lockMovementWhileMenuIsOpen = Config.lockMovementWhileMenuIsOpen,
         lockMovementWhileMenuIsOpenEnhanced = Config.lockMovementWhileMenuIsOpenEnhanced,
-        positionStep = Config.positionStep
+        positionStep = Config.positionStep,
+        spawnUnnetworked = Config.spawnUnnetworked
     })
 
     if FileMgr.WriteFileContent(configPath, xmlContent) then
@@ -229,7 +231,7 @@ Spooner.grabOffsets = nil
 Spooner.grabbedEntityRotation = nil
 Spooner.isGrabbing = false
 Spooner.scaleform = nil
----@alias ManagedEntity {entity: integer, networkId: integer, x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}
+---@alias ManagedEntity {entity: integer, networkId: integer, networked: boolean, x: number, y: number, z: number, rotX: number, rotY: number, rotZ: number}
 ---@type ManagedEntity[]
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
@@ -239,6 +241,7 @@ Spooner.throwableMode = false
 Spooner.clipToGround = false
 Spooner.lockMovementWhileMenuIsOpen = false
 Spooner.lockMovementWhileMenuIsOpenEnhanced = false
+Spooner.spawnUnnetworked = false
 -- Preview spawn system
 Spooner.previewEntity = nil
 Spooner.previewModelHash = nil
@@ -814,6 +817,7 @@ function Spooner.ToggleEntityInManagedList(entity)
     local managedEntry = {
         entity = entity,
         networkId = networkId,
+        networked = NetworkUtils.IsEntityNetworked(entity),
         x = pos.x, y = pos.y, z = pos.z,
         rotX = rot.x, rotY = rot.y, rotZ = rot.z
     }
@@ -877,21 +881,22 @@ end
 ---@return integer|nil entity
 ---@return boolean isInDatabase
 ---@return integer networkId
+---@return boolean networked
 function Spooner.GetEditingEntity()
     -- Priority: database selection > quick edit
     if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
         local managed = Spooner.managedEntities[Spooner.selectedEntityIndex]
         if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
-            return managed.entity, true, managed.networkId  -- entity, isInDatabase, networkId
+            return managed.entity, true, managed.networkId, managed.networked  -- entity, isInDatabase, networkId, networked
         end
     end
 
     -- Fall back to quick edit entity
     if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
-        return Spooner.quickEditEntity, false, 0  -- entity, isInDatabase, networkId
+        return Spooner.quickEditEntity, false, 0, false  -- entity, isInDatabase, networkId, networked
     end
 
-    return nil, false, 0
+    return nil, false, 0, false
 end
 
 -- Update the blip for the selected entity (database or quick edit)
@@ -1274,6 +1279,7 @@ function Spooner.SpawnFromPlacement(placement, skipNetworking)
         local managedEntry = {
             entity = entity,
             networkId = networkId,
+            networked = NetworkUtils.IsEntityNetworked(entity),
             x = pos.x, y = pos.y, z = pos.z,
             rotX = rot.x, rotY = rot.y, rotZ = rot.z
         }
@@ -1597,19 +1603,23 @@ function Spawner.ConfirmSpawn()
             ENTITY.FREEZE_ENTITY_POSITION(Spooner.previewEntity, false)
             ENTITY.SET_ENTITY_VELOCITY(Spooner.previewEntity, 0, 0 ,-1)
         end
-        NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
+        if not Spooner.spawnUnnetworked then
+            NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
+        end
         local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
+        local isNetworked = NetworkUtils.IsEntityNetworked(Spooner.previewEntity)
         local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
         local rot = ENTITY.GET_ENTITY_ROTATION(Spooner.previewEntity, 2)
         ---@type ManagedEntity
         local managedEntry = {
             entity = Spooner.previewEntity,
             networkId = networkId,
+            networked = isNetworked,
             x = pos.x, y = pos.y, z = pos.z,
             rotX = rot.x, rotY = rot.y, rotZ = rot.z
         }
         table.insert(Spooner.managedEntities, managedEntry)
-        CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
+        CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName .. (isNetworked and " [Networked]" or " [Local]"))
         Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
     end)
 end
@@ -1818,8 +1828,9 @@ end
 
 ---@param entity integer
 ---@param networkId? integer
+---@param networked? boolean
 ---@return string
-function DrawManager.GetEntityName(entity, networkId)
+function DrawManager.GetEntityName(entity, networkId, networked)
     if not ENTITY.DOES_ENTITY_EXIST(entity) then
         return "Invalid Entity"
     end
@@ -1849,7 +1860,12 @@ function DrawManager.GetEntityName(entity, networkId)
 
     -- Append networkId if provided and non-zero
     if networkId and networkId ~= 0 then
-        return baseName .. " (" .. tostring(networkId) .. ")"
+        baseName = baseName .. " (" .. tostring(networkId) .. ")"
+    end
+
+    -- Append networked status
+    if networked ~= nil then
+        baseName = baseName .. (networked and " [N]" or " [L]")
     end
 
     return baseName
@@ -1978,6 +1994,7 @@ function DrawManager.ClickGUIInit()
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableF9Key"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableThrowableMode"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_EnableClipToGround"))
+                    ClickGUI.RenderFeature(Utils.Joaat("Spooner_SpawnUnnetworked"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpen"))
                     ClickGUI.RenderFeature(Utils.Joaat("Spooner_LockMovementWhileMenuIsOpenEnhanced"))
                     ClickGUI.EndCustomChildWindow()
@@ -1997,11 +2014,11 @@ function DrawManager.ClickGUIInit()
                     for i, managed in ipairs(Spooner.managedEntities) do
                         if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
                             if ENTITY.IS_ENTITY_A_VEHICLE(managed.entity) then
-                                table.insert(vehicles, {index = i, entity = managed.entity, networkId = managed.networkId})
+                                table.insert(vehicles, {index = i, entity = managed.entity, networkId = managed.networkId, networked = managed.networked})
                             elseif ENTITY.IS_ENTITY_A_PED(managed.entity) then
-                                table.insert(peds, {index = i, entity = managed.entity, networkId = managed.networkId})
+                                table.insert(peds, {index = i, entity = managed.entity, networkId = managed.networkId, networked = managed.networked})
                             else
-                                table.insert(props, {index = i, entity = managed.entity, networkId = managed.networkId})
+                                table.insert(props, {index = i, entity = managed.entity, networkId = managed.networkId, networked = managed.networked})
                             end
                         end
                     end
@@ -2013,7 +2030,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No vehicles in database")
                             else
                                 for _, item in ipairs(vehicles) do
-                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
                                         Script.QueueJob(function()
@@ -2033,7 +2050,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No peds in database")
                             else
                                 for _, item in ipairs(peds) do
-                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
@@ -2053,7 +2070,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No props in database")
                             else
                                 for _, item in ipairs(props) do
-                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId, item.networked)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
                                         Script.QueueJob(function()
@@ -2092,13 +2109,13 @@ function DrawManager.ClickGUIInit()
 
                 -- Manual Position/Rotation Control Section
                 if ClickGUI.BeginCustomChildWindow("Entity Transform") then
-                    local entity, isInDatabase, networkId = Spooner.GetEditingEntity()
+                    local entity, isInDatabase, networkId, networked = Spooner.GetEditingEntity()
                     if entity then
                         local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
                         local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
 
                         -- Show entity info
-                        local entityName = DrawManager.GetEntityName(entity, networkId)
+                        local entityName = DrawManager.GetEntityName(entity, networkId, networked)
                         ImGui.Text("Editing: " .. entityName)
                         if not isInDatabase then
                             ImGui.SameLine()
@@ -2754,6 +2771,7 @@ FeatureMgr.AddFeature(
             local managedEntry = {
                 entity = entity,
                 networkId = networkId,
+                networked = NetworkUtils.IsEntityNetworked(entity),
                 x = pos.x, y = pos.y, z = pos.z,
                 rotX = rot.x, rotY = rot.y, rotZ = rot.z
             }
@@ -2857,6 +2875,18 @@ local enableClipToGroundFeature = FeatureMgr.AddFeature(
         Logger.LogInfo("clipToGround: " .. tostring(f:IsToggled()))
         Config.clipToGround = f:IsToggled()
         Spooner.clipToGround = Config.clipToGround
+        SaveConfig()
+    end
+)
+
+local spawnUnnetworkedFeature = FeatureMgr.AddFeature(
+    Utils.Joaat("Spooner_SpawnUnnetworked"),
+    "Spawn Unnetworked",
+    eFeatureType.Toggle,
+    "Spawn entities as local (unnetworked) entities",
+    function(f)
+        Config.spawnUnnetworked = f:IsToggled()
+        Spooner.spawnUnnetworked = Config.spawnUnnetworked
         SaveConfig()
     end
 )
@@ -2968,6 +2998,9 @@ Script.QueueJob(function()
         end
         if loadedConfig.positionStep ~= nil then
             positionStepFeature:SetFloatValue(loadedConfig.positionStep)
+        end
+        if loadedConfig.spawnUnnetworked ~= nil and loadedConfig.spawnUnnetworked then
+            spawnUnnetworkedFeature:Toggle(loadedConfig.spawnUnnetworked)
         end
     end
 end)

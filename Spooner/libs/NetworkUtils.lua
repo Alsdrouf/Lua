@@ -10,31 +10,34 @@ local eMigrationType = {
 
 local NetworkUtils = {}
 
--- Credits GuseXenvious (Proably sainan too)
-local entities = {}
-entities.set_can_migrate = function(entity, canMigrate)
-local Pointer = GTA.HandleToPointer(entity):GetAddress()
-    if Pointer ~= 0 then
-        Pointer = Memory.ReadLong(Pointer+0xD0)
-        if Pointer ~= 0 then
-            local Bits = Memory.ReadByte(Pointer+0x4E)
-            if not canMigrate and Bits | 1 == 0 then
-                Bits = Bits + 1
-                Memory.WriteByte(Pointer+0x4E, Bits)
-            elseif Bits | 1 == 1 then
-                Bits = Bits - 1
-                Memory.WriteByte(Pointer+0x4E, Bits)
-            end
-        end
-    end
-end
-
 function NetworkUtils.New(CONSTANTS)
     local self = {}
 
+    function self.IsEntityNetworked(entity)
+        return NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity)
+    end
+
+    -- Credits GuseXenvious (Probably sainan too)
+    function self.set_can_migrate(entity, canMigrate)
+        local Pointer = GTA.HandleToPointer(entity):GetAddress()
+        if Pointer ~= 0 then
+            Pointer = Memory.ReadLong(Pointer+0xD0)
+            if Pointer ~= 0 then
+                local Bits = Memory.ReadByte(Pointer+0x4E)
+                if not canMigrate and Bits | 1 == 0 then
+                    Bits = Bits + 1
+                    Memory.WriteByte(Pointer+0x4E, Bits)
+                elseif Bits | 1 == 1 then
+                    Bits = Bits - 1
+                    Memory.WriteByte(Pointer+0x4E, Bits)
+                end
+            end
+        end
+    end
+
     function self.SetEntityAsNetworked(entity, timeout)
         local time = Time.GetEpocheMs() + (timeout or CONSTANTS.NETWORK_TIMEOUT)
-        while time > Time.GetEpocheMs() and not NETWORK.NETWORK_GET_ENTITY_IS_NETWORKED(entity) do
+        while time > Time.GetEpocheMs() and not self.IsEntityNetworked(entity) do
             NETWORK.NETWORK_REGISTER_ENTITY_AS_NETWORKED(entity)
             Script.Yield(0)
         end
@@ -84,7 +87,7 @@ function NetworkUtils.New(CONSTANTS)
         if NETWORK.NETWORK_IS_SESSION_STARTED() then
             netId = self.ConstantizeNetworkId(entity)
             -- NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false) #Shitty native
-            entities.set_can_migrate(entity, false)
+            self.set_can_migrate(entity, false)
         end
 
         if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
