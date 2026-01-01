@@ -10,6 +10,24 @@ local eMigrationType = {
 
 local NetworkUtils = {}
 
+local entities = {}
+entities.set_can_migrate = function(entity, canMigrate)
+local Pointer = GTA.HandleToPointer(entity):GetAddress()
+    if Pointer ~= 0 then
+        Pointer = Memory.ReadLong(Pointer+0xD0)
+        if Pointer ~= 0 then
+            local Bits = Memory.ReadByte(Pointer+0x4E)
+            if not canMigrate and Bits | 1 == 0 then
+                Bits = Bits + 1
+                Memory.WriteByte(Pointer+0x4E, Bits)
+            elseif Bits | 1 == 1 then
+                Bits = Bits - 1
+                Memory.WriteByte(Pointer+0x4E, Bits)
+            end
+        end
+    end
+end
+
 function NetworkUtils.New(CONSTANTS)
     local self = {}
 
@@ -64,7 +82,8 @@ function NetworkUtils.New(CONSTANTS)
         local netId = 0
         if NETWORK.NETWORK_IS_SESSION_STARTED() then
             netId = self.ConstantizeNetworkId(entity)
-            NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false)
+            -- NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false) #Shitty native
+            entities.set_can_migrate(entity, false)
         end
 
         if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
