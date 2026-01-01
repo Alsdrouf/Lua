@@ -60,15 +60,15 @@ function NetworkUtils.New(CONSTANTS)
     end
 
     function self.MakeEntityNetworked(entity)
-        if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
-            ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
-        end
-
         -- Skip network functions in singleplayer
         local netId = 0
         if NETWORK.NETWORK_IS_SESSION_STARTED() then
             netId = self.ConstantizeNetworkId(entity)
             NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, false)
+        end
+
+        if not DECORATOR.DECOR_EXIST_ON(entity, "PV_Slot") then
+            ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
         end
 
         return netId
@@ -98,6 +98,7 @@ function NetworkUtils.New(CONSTANTS)
             return 0
         end
 
+        local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
         local cPhysical = GTA.HandleToPointer(entity)
         if not cPhysical or not cPhysical.NetObject then return end
         if NETWORK.NETWORK_HAS_CONTROL_OF_NETWORK_ID(cPhysical.NetObject.ObjectID) then return end
@@ -106,6 +107,7 @@ function NetworkUtils.New(CONSTANTS)
         local cNetGamePlayer = Players.GetById(playerId)
         if not cNetGamePlayer then return end
         NetworkObjectMgr.ChangeOwner(cPhysical.NetObject, cNetGamePlayer, eMigrationType.MIGRATE_FORCED)
+        return netId
     end
 
     return self

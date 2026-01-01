@@ -229,6 +229,8 @@ Spooner.grabOffsets = nil
 Spooner.grabbedEntityRotation = nil
 Spooner.isGrabbing = false
 Spooner.scaleform = nil
+---@alias ManagedEntity {entity: integer, networkId: integer}
+---@type ManagedEntity[]
 Spooner.managedEntities = {}
 Spooner.selectedEntityIndex = 0
 Spooner.selectedEntityBlip = nil
@@ -784,8 +786,8 @@ function Spooner.ToggleEntityInManagedList(entity)
         return
     end
 
-    for i, e in ipairs(Spooner.managedEntities) do
-        if e == entity then
+    for i, managed in ipairs(Spooner.managedEntities) do
+        if managed.entity == entity then
             table.remove(Spooner.managedEntities, i)
             CustomLogger.Info("Removed entity from managed list: " .. tostring(entity))
             -- If this was the selected entity, switch to quick edit mode
@@ -805,8 +807,11 @@ function Spooner.ToggleEntityInManagedList(entity)
     -- Adding entity to database
     NetworkUtils.MakeEntityNetworked(entity)
     Spooner.TakeControlOfEntity(entity)
-    table.insert(Spooner.managedEntities, entity)
-    CustomLogger.Info("Entity added to managed list: " .. tostring(entity))
+    local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    ---@type ManagedEntity
+    local managedEntry = {entity = entity, networkId = networkId}
+    table.insert(Spooner.managedEntities, managedEntry)
+    CustomLogger.Info("Entity added to managed list: " .. tostring(entity) .. " (netId: " .. tostring(networkId) .. ")")
 
     -- If this entity was the quick edit entity, switch to database selection
     if Spooner.quickEditEntity == entity then
@@ -824,8 +829,8 @@ function Spooner.SelectEntityForQuickEdit(entity)
 
     -- Check if entity is already in the database
     local foundIndex = nil
-    for i, managedEntity in ipairs(Spooner.managedEntities) do
-        if managedEntity == entity then
+    for i, managed in ipairs(Spooner.managedEntities) do
+        if managed.entity == entity then
             foundIndex = i
             break
         end
@@ -862,21 +867,24 @@ function Spooner.SelectEntityForQuickEdit(entity)
 end
 
 -- Get the entity currently being edited (either from database or quick edit)
+---@return integer|nil entity
+---@return boolean isInDatabase
+---@return integer networkId
 function Spooner.GetEditingEntity()
     -- Priority: database selection > quick edit
     if Spooner.selectedEntityIndex > 0 and Spooner.selectedEntityIndex <= #Spooner.managedEntities then
-        local entity = Spooner.managedEntities[Spooner.selectedEntityIndex]
-        if ENTITY.DOES_ENTITY_EXIST(entity) then
-            return entity, true  -- entity, isInDatabase
+        local managed = Spooner.managedEntities[Spooner.selectedEntityIndex]
+        if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
+            return managed.entity, true, managed.networkId  -- entity, isInDatabase, networkId
         end
     end
 
     -- Fall back to quick edit entity
     if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
-        return Spooner.quickEditEntity, false  -- entity, isInDatabase
+        return Spooner.quickEditEntity, false, 0  -- entity, isInDatabase, networkId
     end
 
-    return nil, false
+    return nil, false, 0
 end
 
 -- Update the blip for the selected entity (database or quick edit)
@@ -901,11 +909,11 @@ end
 
 function Spooner.ManageEntities()
     for i = #Spooner.managedEntities, 1, -1 do
-        local entity = Spooner.managedEntities[i]
+        local managed = Spooner.managedEntities[i]
         Script.QueueJob(function()
-            if ENTITY.DOES_ENTITY_EXIST(entity) then
+            if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
                 -- Use lighter function to maintain control without resetting ped tasks
-                Spooner.TakeControlOfEntity(entity)
+                Spooner.TakeControlOfEntity(managed.entity)
             else
                 table.remove(Spooner.managedEntities, i)
                 CustomLogger.Info("Removed invalid entity from list")
@@ -1078,8 +1086,8 @@ function Spooner.SaveDatabaseToXML(filename)
     local placements = {}
     local referenceCoords = nil
 
-    for _, entity in ipairs(Spooner.managedEntities) do
-        local placementData = Spooner.GetEntityPlacementData(entity)
+    for _, managed in ipairs(Spooner.managedEntities) do
+        local placementData = Spooner.GetEntityPlacementData(managed.entity)
         if placementData then
             table.insert(placements, placementData)
 
@@ -1252,7 +1260,10 @@ function Spooner.SpawnFromPlacement(placement, skipNetworking)
         if not skipNetworking then
             NetworkUtils.MakeEntityNetworked(entity)
         end
-        table.insert(Spooner.managedEntities, entity)
+        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        ---@type ManagedEntity
+        local managedEntry = {entity = entity, networkId = networkId}
+        table.insert(Spooner.managedEntities, managedEntry)
 
         CustomLogger.Info("Spawned entity: " .. (placement.hashName or placement.modelHash))
     end
@@ -1567,13 +1578,16 @@ function Spawner.ConfirmSpawn()
     Script.QueueJob(function()
         -- Remove status
         ENTITY.SET_ENTITY_COLLISION(Spooner.previewEntity, true, true)
-        ENTITY.SET_ENTITY_INVINCIBLE(Spooner.previewEntity, false)
+        ENTITY.SET_ENTITY_INVINCIBLE(Spooner.previewEntity, false, false)
         if Spooner.previewEntityType ~= "prop" then
             ENTITY.FREEZE_ENTITY_POSITION(Spooner.previewEntity, false)
             ENTITY.SET_ENTITY_VELOCITY(Spooner.previewEntity, 0, 0 ,-1)
         end
         NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
-        table.insert(Spooner.managedEntities, Spooner.previewEntity)
+        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
+        ---@type ManagedEntity
+        local managedEntry = {entity = Spooner.previewEntity, networkId = networkId}
+        table.insert(Spooner.managedEntities, managedEntry)
         CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName)
         Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
     end)
@@ -1741,8 +1755,8 @@ function DrawManager.DrawInstructionalButtons()
 
     if entityToCheck and ENTITY.DOES_ENTITY_EXIST(entityToCheck) then
         local isManaged = false
-        for _, e in ipairs(Spooner.managedEntities) do
-            if e == entityToCheck then
+        for _, managed in ipairs(Spooner.managedEntities) do
+            if managed.entity == entityToCheck then
                 isManaged = true
                 break
             end
@@ -1781,31 +1795,43 @@ function DrawManager.DrawInstructionalButtons()
     GRAPHICS.DRAW_SCALEFORM_MOVIE_FULLSCREEN(Spooner.scaleform, 255, 255, 255, 255, 0)
 end
 
-function DrawManager.GetEntityName(entity)
+---@param entity integer
+---@param networkId? integer
+---@return string
+function DrawManager.GetEntityName(entity, networkId)
     if not ENTITY.DOES_ENTITY_EXIST(entity) then
         return "Invalid Entity"
     end
 
     local modelHash = ENTITY.GET_ENTITY_MODEL(entity)
+    local baseName
 
     if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
         -- Get the display name (like "Adder" instead of "adder")
         local displayName = GTA.GetDisplayNameFromHash(modelHash)
         local plate = VEHICLE.GET_VEHICLE_NUMBER_PLATE_TEXT(entity)
         if displayName and displayName ~= "" and displayName ~= "NULL" then
-            return displayName .. " [" .. plate .. "]"
+            baseName = displayName .. " [" .. plate .. "]"
+        else
+            baseName = GTA.GetModelNameFromHash(modelHash) .. " [" .. plate .. "]"
         end
-        return GTA.GetModelNameFromHash(modelHash) .. " [" .. plate .. "]"
+    else
+        -- Check cache first for peds and props
+        local cachedName = EntityLists.NameCache[modelHash]
+        if cachedName then
+            baseName = cachedName
+        else
+            -- Fallback to model name
+            baseName = GTA.GetModelNameFromHash(modelHash)
+        end
     end
 
-    -- Check cache first for peds and props
-    local cachedName = EntityLists.NameCache[modelHash]
-    if cachedName then
-        return cachedName
+    -- Append networkId if provided and non-zero
+    if networkId and networkId ~= 0 then
+        return baseName .. " (" .. tostring(networkId) .. ")"
     end
 
-    -- Fallback to model name
-    return GTA.GetModelNameFromHash(modelHash)
+    return baseName
 end
 
 function DrawManager.Draw3DBox(entity)
@@ -1947,14 +1973,14 @@ function DrawManager.ClickGUIInit()
                     local peds = {}
                     local props = {}
 
-                    for i, entity in ipairs(Spooner.managedEntities) do
-                        if ENTITY.DOES_ENTITY_EXIST(entity) then
-                            if ENTITY.IS_ENTITY_A_VEHICLE(entity) then
-                                table.insert(vehicles, {index = i, entity = entity})
-                            elseif ENTITY.IS_ENTITY_A_PED(entity) then
-                                table.insert(peds, {index = i, entity = entity})
+                    for i, managed in ipairs(Spooner.managedEntities) do
+                        if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
+                            if ENTITY.IS_ENTITY_A_VEHICLE(managed.entity) then
+                                table.insert(vehicles, {index = i, entity = managed.entity, networkId = managed.networkId})
+                            elseif ENTITY.IS_ENTITY_A_PED(managed.entity) then
+                                table.insert(peds, {index = i, entity = managed.entity, networkId = managed.networkId})
                             else
-                                table.insert(props, {index = i, entity = entity})
+                                table.insert(props, {index = i, entity = managed.entity, networkId = managed.networkId})
                             end
                         end
                     end
@@ -1966,7 +1992,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No vehicles in database")
                             else
                                 for _, item in ipairs(vehicles) do
-                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##veh_" .. item.index, isSelected) then
                                         Script.QueueJob(function()
@@ -1986,7 +2012,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No peds in database")
                             else
                                 for _, item in ipairs(peds) do
-                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##ped_" .. item.index, isSelected) then
                                         Spooner.selectedEntityIndex = item.index
@@ -2006,7 +2032,7 @@ function DrawManager.ClickGUIInit()
                                 ImGui.Text("No props in database")
                             else
                                 for _, item in ipairs(props) do
-                                    local label = DrawManager.GetEntityName(item.entity)
+                                    local label = DrawManager.GetEntityName(item.entity, item.networkId)
                                     local isSelected = (item.index == Spooner.selectedEntityIndex)
                                     if ImGui.Selectable(label .. "##prop_" .. item.index, isSelected) then
                                         Script.QueueJob(function()
@@ -2045,13 +2071,13 @@ function DrawManager.ClickGUIInit()
 
                 -- Manual Position/Rotation Control Section
                 if ClickGUI.BeginCustomChildWindow("Entity Transform") then
-                    local entity, isInDatabase = Spooner.GetEditingEntity()
+                    local entity, isInDatabase, networkId = Spooner.GetEditingEntity()
                     if entity then
                         local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
                         local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
 
                         -- Show entity info
-                        local entityName = DrawManager.GetEntityName(entity)
+                        local entityName = DrawManager.GetEntityName(entity, networkId)
                         ImGui.Text("Editing: " .. entityName)
                         if not isInDatabase then
                             ImGui.SameLine()
@@ -2444,8 +2470,8 @@ FeatureMgr.AddFeature(
     function(f)
         local entity, isInDatabase = Spooner.GetEditingEntity()
         if entity and ENTITY.DOES_ENTITY_EXIST(entity) and isInDatabase then
-            for i, managedEntity in ipairs(Spooner.managedEntities) do
-                if managedEntity == entity then
+            for i, managed in ipairs(Spooner.managedEntities) do
+                if managed.entity == entity then
                     table.remove(Spooner.managedEntities, i)
                     break
                 end
@@ -2590,8 +2616,8 @@ FeatureMgr.AddFeature(
                 Spooner.quickEditEntity = nil
             end
             if isInDatabase then
-                for i, managedEntity in ipairs(Spooner.managedEntities) do
-                    if managedEntity == entity then
+                for i, managed in ipairs(Spooner.managedEntities) do
+                    if managed.entity == entity then
                         table.remove(Spooner.managedEntities, i)
                         break
                     end
@@ -2693,14 +2719,17 @@ FeatureMgr.AddFeature(
         local entity = Spooner.GetEditingEntity()
         if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
             -- Check if already in database
-            for _, managedEntity in ipairs(Spooner.managedEntities) do
-                if managedEntity == entity then
+            for _, managed in ipairs(Spooner.managedEntities) do
+                if managed.entity == entity then
                     GUI.AddToast("Spooner", "Entity already in database", 2000, eToastPos.BOTTOM_RIGHT)
                     return
                 end
             end
             -- Add to database
-            table.insert(Spooner.managedEntities, entity)
+            local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+            ---@type ManagedEntity
+            local managedEntry = {entity = entity, networkId = networkId}
+            table.insert(Spooner.managedEntities, managedEntry)
             Spooner.selectedEntityIndex = #Spooner.managedEntities
             Spooner.quickEditEntity = nil
             Script.QueueJob(function()
