@@ -711,6 +711,13 @@ function Spooner.UpdateFreecam()
     end
 end
 
+function Spooner.GetVehicleOfPed(ped)
+    if PED.IS_PED_IN_ANY_VEHICLE(ped, true) then
+        return PED.GET_VEHICLE_PED_IS_IN(ped, true)
+    end
+    return nil
+end
+
 function Spooner.ToggleSpoonerMode(f)
     if Spooner.inSpoonerMode == f then
         return
@@ -730,9 +737,10 @@ function Spooner.ToggleSpoonerMode(f)
 
         -- Freeze player to prevent falling through the world when camera is far
         local playerPed = PLAYER.PLAYER_PED_ID()
-        Spooner.playerWasFrozen = Spooner.isEntityFrozen(playerPed)
+        local vehicle = Spooner.GetVehicleOfPed(playerPed)
+        Spooner.playerWasFrozen = Spooner.isEntityFrozen(vehicle or playerPed)
         if not Spooner.playerWasFrozen then
-            ENTITY.FREEZE_ENTITY_POSITION(playerPed, true)
+            ENTITY.FREEZE_ENTITY_POSITION(vehicle or playerPed, true)
         end
 
         -- Create blip for camera position
@@ -757,8 +765,9 @@ function Spooner.ToggleSpoonerMode(f)
 
             -- Restore player frozen state
             local playerPed = PLAYER.PLAYER_PED_ID()
+            local vehicle = Spooner.GetVehicleOfPed(playerPed)
             if not Spooner.playerWasFrozen then
-                ENTITY.FREEZE_ENTITY_POSITION(playerPed, false)
+                ENTITY.FREEZE_ENTITY_POSITION(vehicle or playerPed, false)
             end
 
             -- Remove camera blip
