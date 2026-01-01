@@ -10,6 +10,7 @@ local eMigrationType = {
 
 local NetworkUtils = {}
 
+-- Credits GuseXenvious (Proably sainan too)
 local entities = {}
 entities.set_can_migrate = function(entity, canMigrate)
 local Pointer = GTA.HandleToPointer(entity):GetAddress()
