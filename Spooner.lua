@@ -1962,12 +1962,12 @@ function DrawManager.DrawSelectedEntityMarker()
     if entity and ENTITY.DOES_ENTITY_EXIST(entity) then
         local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
         local minX, minY, minZ, maxX, maxY, maxZ = Spooner.GetEntityDimensions(entity, "SelectedMarker")
-        local height = maxZ - minZ
 
         -- Draw big arrow pointing down at the entity
+        -- Use maxZ since dimensions are relative to entity origin
         GRAPHICS.DRAW_MARKER(
             0,
-            pos.x, pos.y, pos.z + height + 1.0,
+            pos.x, pos.y, pos.z + maxZ + 1.0,
             0.0, 0.0, 0.0,
             0.0, 0.0, 0.0,
             1.0, 1.0, 1.5,
