@@ -441,6 +441,27 @@ function Spooner.ClipEntityToGround(entity, newPos)
     return newPos
 end
 
+function Spooner.DeleteEntity(entity)
+    Spooner.UpdateSelectedEntityBlip()
+
+    local netId = Spooner.TakeControlOfEntity(entity)
+
+    local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
+    Memory.WriteInt(ptr, entity)
+
+    NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
+    NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), false)
+    NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
+    ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
+    ENTITY.DELETE_ENTITY(ptr)
+
+    CustomLogger.Info("Network ID: " .. tostring(netId))
+
+    if ENTITY.DOES_ENTITY_EXIST(entity) then
+        ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
+    end
+end
+
 function Spooner.StartGrabbing()
     if Spooner.isGrabbing or not Spooner.isEntityTargeted or Spooner.targetedEntity == nil then
         return false
@@ -585,6 +606,34 @@ function Spooner.HandleEntityGrabbing()
     Spooner.UpdateGrabbedEntity()
 end
 
+function Spooner.HandleInput()
+    if not Spooner.inSpoonerMode then
+        return
+    end
+
+    -- Handle right-click to select entity for quick editing (only when not grabbing and not in preview mode)
+    if not Spooner.previewModelHash and not Spooner.isGrabbing and Keybinds.SelectForEdit.IsPressed() then
+        if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
+            Spooner.SelectEntityForQuickEdit(Spooner.targetedEntity)
+        end
+    end
+
+    -- Block adding to database while in preview mode
+    if not Spooner.previewModelHash and Keybinds.AddOrRemoveFromList.IsPressed() then
+        local entityToAdd = nil
+
+        if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
+            entityToAdd = Spooner.grabbedEntity
+        elseif Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
+            entityToAdd = Spooner.targetedEntity
+        end
+
+        if entityToAdd then
+            Spooner.ToggleEntityInManagedList(entityToAdd)
+        end
+    end
+end
+
 function Spooner.UpdateFreecam()
     if not Spooner.inSpoonerMode or not Spooner.freecam then
         return
@@ -696,6 +745,7 @@ function Spooner.ToggleSpoonerMode(f)
             CAM.SET_CAM_ACTIVE(Spooner.freecam, false)
             CAM.DESTROY_CAM(Spooner.freecam, false)
             Spooner.freecam = nil
+            Spooner.targetedEntity = nil
 
             -- Restore player frozen state
             local playerPed = PLAYER.PLAYER_PED_ID()
@@ -850,41 +900,17 @@ function Spooner.UpdateSelectedEntityBlip()
 end
 
 function Spooner.ManageEntities()
-    if not Spooner.inSpoonerMode then
-        return
-    end
-
-    -- Handle right-click to select entity for quick editing (only when not grabbing and not in preview mode)
-    if not Spooner.previewModelHash and not Spooner.isGrabbing and Keybinds.SelectForEdit.IsPressed() then
-        if Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
-            Spooner.SelectEntityForQuickEdit(Spooner.targetedEntity)
-        end
-    end
-
-    -- Block adding to database while in preview mode
-    if not Spooner.previewModelHash and Keybinds.AddOrRemoveFromList.IsPressed() then
-        local entityToAdd = nil
-
-        if Spooner.isGrabbing and Spooner.grabbedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.grabbedEntity) then
-            entityToAdd = Spooner.grabbedEntity
-        elseif Spooner.isEntityTargeted and Spooner.targetedEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.targetedEntity) then
-            entityToAdd = Spooner.targetedEntity
-        end
-
-        if entityToAdd then
-            Spooner.ToggleEntityInManagedList(entityToAdd)
-        end
-    end
-
     for i = #Spooner.managedEntities, 1, -1 do
         local entity = Spooner.managedEntities[i]
-        if ENTITY.DOES_ENTITY_EXIST(entity) then
-            -- Use lighter function to maintain control without resetting ped tasks
-            Spooner.TakeControlOfEntity(entity)
-        else
-            table.remove(Spooner.managedEntities, i)
-            CustomLogger.Info("Removed invalid entity from list")
-        end
+        Script.QueueJob(function()
+            if ENTITY.DOES_ENTITY_EXIST(entity) then
+                -- Use lighter function to maintain control without resetting ped tasks
+                Spooner.TakeControlOfEntity(entity)
+            else
+                table.remove(Spooner.managedEntities, i)
+                CustomLogger.Info("Removed invalid entity from list")
+            end
+        end)
     end
 
     -- Also maintain control of quick edit entity if set
@@ -2574,24 +2600,7 @@ FeatureMgr.AddFeature(
             Spooner.selectedEntityIndex = 0
 
             Script.QueueJob(function()
-                Spooner.UpdateSelectedEntityBlip()
-
-                local netId = Spooner.TakeControlOfEntity(entity)
-
-                local ptr = MemoryUtils.AllocInt("deleteEntityPtr")
-                Memory.WriteInt(ptr, entity)
-
-                NETWORK.SET_NETWORK_ID_EXISTS_ON_ALL_MACHINES(netId, false)
-                NETWORK.SET_NETWORK_ID_ALWAYS_EXISTS_FOR_PLAYER(netId, PLAYER.PLAYER_ID(), false)
-                NETWORK.SET_NETWORK_ID_CAN_MIGRATE(netId, true)
-                ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true)
-                ENTITY.DELETE_ENTITY(ptr)
-
-                CustomLogger.Info("Network ID: " .. tostring(netId))
-
-                if ENTITY.DOES_ENTITY_EXIST(entity) then
-                    ENTITY.SET_ENTITY_COORDS_NO_OFFSET(entity, 0, 0, 0, false, false, false)
-                end
+                Spooner.DeleteEntity(entity)
 
                 CustomLogger.Info("Deleted entity: " .. tostring(entity))
                 GUI.AddToast("Spooner", "Entity deleted", 1500, eToastPos.BOTTOM_RIGHT)
@@ -2910,6 +2919,7 @@ end)
 Script.RegisterLooped(function()
     Script.QueueJob(function()
         Spooner.UpdateFreecam()
+        Spooner.HandleInput()
         Spawner.HandleInput()
         Spawner.UpdatePreview()
     end)
@@ -2946,15 +2956,18 @@ Script.RegisterLooped(function()
 end)
 
 Script.RegisterLooped(function()
-    Script.QueueJob(function()
-        Spooner.ManageEntities()
-    end)
+    Spooner.ManageEntities()
 end)
 
 EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
-    if Spooner.inSpoonerMode then
-        toggleSpoonerModeFeature:Toggle()
-    end
-    -- Free all cached memory allocations
-    MemoryUtils.FreeAll()
+    Script.QueueJob(function()
+        if Spooner.inSpoonerMode then
+            toggleSpoonerModeFeature:Toggle()
+        end
+        Spooner.selectedEntityIndex = 0
+        Spooner.quickEditEntity = nil
+        Spooner.UpdateSelectedEntityBlip()
+        -- Free all cached memory allocations
+        MemoryUtils.FreeAll()
+    end)
 end)
