@@ -812,7 +812,7 @@ function Spooner.ToggleEntityInManagedList(entity)
     local networked = false
     if NetworkUtils.IsEntityNetworked(entity) then
         Spooner.TakeControlOfEntity(entity)
-        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
         networked = true
     end
     local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
