@@ -377,8 +377,8 @@ function Spooner.GetFollowPlayerDelta()
     return delta
 end
 
-function Spooner.GetGroundZAtPosition(x, y, z)
-    local isTargeted, entityTarget, rayHitCoords = RaycastForClipToGround.PerformCheck(x, y, z + 4, x, y, z - 100, CONSTANTS.CLIP_TO_GROUND_RAYCAST_FLAGS)
+function Spooner.GetGroundZAtPosition(x, y, z, ignoreEntity)
+    local isTargeted, entityTarget, rayHitCoords = RaycastForClipToGround.PerformCheck(x, y, z + 4, x, y, z - 100, CONSTANTS.CLIP_TO_GROUND_RAYCAST_FLAGS, ignoreEntity)
 
     return rayHitCoords.z
 end
@@ -402,8 +402,8 @@ function Spooner.ClipEntityToGround(entity, newPos)
         return newPos
     end
 
-    -- Get ground Z at the entity's position
-    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z)
+    -- Get ground Z at the entity's position (ignore the entity being moved)
+    local groundZ = Spooner.GetGroundZAtPosition(newPos.x, newPos.y, newPos.z, entity)
 
     if groundZ then
         -- Get entity model dimensions

@@ -15,12 +15,12 @@ function RaycastLib.New(name, CONSTANTS, CustomLogger, MemoryUtils)
     local surfaceNormal = MemoryUtils.Alloc(name .. "raycast_surfaceNormal", 24)
     local entityHit = MemoryUtils.AllocInt(name .. "raycast_entityHit")
 
-    function Raycast.StartProbe(startX, startY, startZ, endX, endY, endZ, flags)
+    function Raycast.StartProbe(startX, startY, startZ, endX, endY, endZ, flags, ignoreEntity)
         local handle = SHAPETEST.START_SHAPE_TEST_LOS_PROBE(
             startX, startY, startZ,
             endX, endY, endZ,
             flags,
-            0,
+            ignoreEntity or 0,
             7
         )
 
@@ -65,7 +65,7 @@ function RaycastLib.New(name, CONSTANTS, CustomLogger, MemoryUtils)
         return false, nil, rayHitCoords
     end
 
-    function Raycast.PerformCheck(startX, startY, startZ, endX, endY, endZ, flags)
+    function Raycast.PerformCheck(startX, startY, startZ, endX, endY, endZ, flags, ignoreEntity)
         Raycast.frameCounter = Raycast.frameCounter + 1
         local isTargeted = not not Raycast.currentTarget
         local targetedEntity = Raycast.currentTarget
@@ -98,7 +98,8 @@ function RaycastLib.New(name, CONSTANTS, CustomLogger, MemoryUtils)
                 Raycast.StartProbe(
                     startX, startY, startZ,
                     endX, endY, endZ,
-                    flags
+                    flags,
+                    ignoreEntity
                 )
             end
         end
