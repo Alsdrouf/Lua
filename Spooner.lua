@@ -2704,6 +2704,7 @@ local networkedEntityFeature = FeatureMgr.AddFeature(
                 else
                     local cPhysical = GTA.HandleToPointer(entity)
                     NetworkObjectMgr.UnregisterNetworkObject(cPhysical.NetObject, 0, true, false)
+                    ENTITY.SET_ENTITY_AS_MISSION_ENTITY(entity, false, true) -- Fix despawning
                 end
                 -- Update the managed entity's networked state
                 for _, managed in ipairs(Spooner.managedEntities) do
