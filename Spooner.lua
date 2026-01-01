@@ -1605,6 +1605,10 @@ function Spawner.ConfirmSpawn()
         end
         local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
         local rot = ENTITY.GET_ENTITY_ROTATION(Spooner.previewEntity, 2)
+
+        ENTITY.SET_ENTITY_COORDS(Spooner.previewEntity, pos.x, pos.y, pos.z, false, false, false, false)
+        ENTITY.SET_ENTITY_ROTATION(Spooner.previewEntity, rot.x, rot.y, rot.z, 0, false)
+
         ---@type ManagedEntity
         local managedEntry = {
             entity = Spooner.previewEntity,
