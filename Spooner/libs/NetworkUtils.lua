@@ -101,7 +101,6 @@ function NetworkUtils.New(CONSTANTS)
         local netId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
         local cPhysical = GTA.HandleToPointer(entity)
         if not cPhysical or not cPhysical.NetObject then return end
-        if NETWORK.NETWORK_HAS_CONTROL_OF_NETWORK_ID(cPhysical.NetObject.ObjectID) then return end
         local playerId = GTA.GetLocalPlayerId()
         if not playerId then return end
         local cNetGamePlayer = Players.GetById(playerId)
