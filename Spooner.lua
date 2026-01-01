@@ -808,16 +808,20 @@ function Spooner.ToggleEntityInManagedList(entity)
     end
 
     -- Adding entity to database
-    NetworkUtils.MakeEntityNetworked(entity)
-    Spooner.TakeControlOfEntity(entity)
-    local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+    local networkId = 0
+    local networked = false
+    if NetworkUtils.IsEntityNetworked(entity) then
+        Spooner.TakeControlOfEntity(entity)
+        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+        networked = true
+    end
     local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
     local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
     ---@type ManagedEntity
     local managedEntry = {
         entity = entity,
         networkId = networkId,
-        networked = NetworkUtils.IsEntityNetworked(entity),
+        networked = networked,
         x = pos.x, y = pos.y, z = pos.z,
         rotX = rot.x, rotY = rot.y, rotZ = rot.z
     }
@@ -892,8 +896,12 @@ function Spooner.GetEditingEntity()
     end
 
     -- Fall back to quick edit entity
-    if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
-        return Spooner.quickEditEntity, false, 0, false  -- entity, isInDatabase, networkId, networked
+    if Spooner.quickEditEntity then
+        if ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
+            return Spooner.quickEditEntity, false, 0, false  -- entity, isInDatabase, networkId, networked
+        else
+            Spooner.quickEditEntity = nil
+        end
     end
 
     return nil, false, 0, false
@@ -920,24 +928,10 @@ function Spooner.UpdateSelectedEntityBlip()
 end
 
 function Spooner.ManageEntities()
-    for i = #Spooner.managedEntities, 1, -1 do
-        local managed = Spooner.managedEntities[i]
-        Script.QueueJob(function()
-            if ENTITY.DOES_ENTITY_EXIST(managed.entity) then
-                -- Use lighter function to maintain control without resetting ped tasks
-                Spooner.TakeControlOfEntity(managed.entity)
-            else
-                table.remove(Spooner.managedEntities, i)
-                CustomLogger.Info("Removed invalid entity from list")
-            end
-        end)
-    end
-
+    local entity, isInDatabase = Spooner.GetEditingEntity()
     -- Also maintain control of quick edit entity if set
-    if Spooner.quickEditEntity and ENTITY.DOES_ENTITY_EXIST(Spooner.quickEditEntity) then
+    if entity and not isInDatabase then
         Spooner.TakeControlOfEntity(Spooner.quickEditEntity)
-    elseif Spooner.quickEditEntity then
-        Spooner.quickEditEntity = nil  -- Clear if no longer exists
     end
 end
 
@@ -1212,22 +1206,10 @@ function Spooner.ApplyPedProperties(ped, props)
     end
 end
 
-function Spooner.SpawnFromPlacement(placement, skipNetworking)
+function Spooner.SpawnFromPlacement(placement)
     local modelHash = XMLParser.ParseNumber(placement.modelHash)
     if modelHash == 0 then
         CustomLogger.Error("Invalid model hash: " .. tostring(placement.modelHash))
-        return nil
-    end
-
-    -- Request model
-    STREAMING.REQUEST_MODEL(modelHash)
-    local timeout = Time.GetEpocheMs() + 5000
-    while not STREAMING.HAS_MODEL_LOADED(modelHash) and Time.GetEpocheMs() < timeout do
-        Script.Yield(0)
-    end
-
-    if not STREAMING.HAS_MODEL_LOADED(modelHash) then
-        CustomLogger.Error("Failed to load model: " .. tostring(placement.modelHash))
         return nil
     end
 
@@ -1268,28 +1250,24 @@ function Spooner.SpawnFromPlacement(placement, skipNetworking)
             ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
         end
 
-        -- Make networked (unless skipped for batch processing) and add to managed list
-        if not skipNetworking then
-            NetworkUtils.MakeEntityNetworked(entity)
-        end
-        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
         local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
         local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
         ---@type ManagedEntity
         local managedEntry = {
             entity = entity,
-            networkId = networkId,
-            networked = NetworkUtils.IsEntityNetworked(entity),
+            networkId = 0,
+            networked = false,
             x = pos.x, y = pos.y, z = pos.z,
             rotX = rot.x, rotY = rot.y, rotZ = rot.z
         }
         table.insert(Spooner.managedEntities, managedEntry)
 
         CustomLogger.Info("Spawned entity: " .. (placement.hashName or placement.modelHash))
+
+        return entity, managedEntry
     end
 
-    STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(modelHash)
-    return entity
+    return entity, nil
 end
 
 function Spooner.LoadDatabaseFromXML(filePath)
@@ -1318,17 +1296,21 @@ function Spooner.LoadDatabaseFromXML(filePath)
 
     local spawnedEntities = {}
     for _, placement in ipairs(parsed.placements) do
-        local entity = Spooner.SpawnFromPlacement(placement, true) -- Skip networking during spawn
+        local entity, managedEntry = Spooner.SpawnFromPlacement(placement)
         if entity then
-            table.insert(spawnedEntities, entity)
+            table.insert(spawnedEntities, {entity, managedEntry})
         end
         Script.Yield(0) -- Yield between spawns to prevent freezing
     end
 
     -- Batch network all spawned entities after loading
-    for _, entity in ipairs(spawnedEntities) do
-        if ENTITY.DOES_ENTITY_EXIST(entity) then
-            NetworkUtils.MakeEntityNetworked(entity)
+    if not Spooner.spawnUnnetworked then
+        for _, managedSpawn in ipairs(spawnedEntities) do
+            if ENTITY.DOES_ENTITY_EXIST(managedSpawn.entity) then
+                local netId = NetworkUtils.MakeEntityNetworked(managedSpawn.entity)
+                managedSpawn.managedEntry.networkId = netId
+                managedSpawn.managedEntry.networked = true
+            end
         end
     end
 
@@ -1603,11 +1585,13 @@ function Spawner.ConfirmSpawn()
             ENTITY.FREEZE_ENTITY_POSITION(Spooner.previewEntity, false)
             ENTITY.SET_ENTITY_VELOCITY(Spooner.previewEntity, 0, 0 ,-1)
         end
+        local networkId = 0
+        local isNetworked = false
         if not Spooner.spawnUnnetworked then
             NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
+            networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
+            isNetworked = NetworkUtils.IsEntityNetworked(Spooner.previewEntity)
         end
-        local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
-        local isNetworked = NetworkUtils.IsEntityNetworked(Spooner.previewEntity)
         local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
         local rot = ENTITY.GET_ENTITY_ROTATION(Spooner.previewEntity, 2)
         ---@type ManagedEntity
@@ -2763,27 +2747,9 @@ FeatureMgr.AddFeature(
                     return
                 end
             end
-            -- Add to database
-            local networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
-            local pos = ENTITY.GET_ENTITY_COORDS(entity, true)
-            local rot = ENTITY.GET_ENTITY_ROTATION(entity, 2)
-            ---@type ManagedEntity
-            local managedEntry = {
-                entity = entity,
-                networkId = networkId,
-                networked = NetworkUtils.IsEntityNetworked(entity),
-                x = pos.x, y = pos.y, z = pos.z,
-                rotX = rot.x, rotY = rot.y, rotZ = rot.z
-            }
-            table.insert(Spooner.managedEntities, managedEntry)
-            Spooner.selectedEntityIndex = #Spooner.managedEntities
-            Spooner.quickEditEntity = nil
-            Script.QueueJob(function()
-                Spooner.UpdateSelectedEntityBlip()
-                NetworkUtils.MakeEntityNetworked(entity)
-                Spooner.TakeControlOfEntity(entity)
-                GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
-            end)
+            -- Add to database using same logic as pressing X
+            Spooner.ToggleEntityInManagedList(entity)
+            GUI.AddToast("Spooner", "Entity added to database", 1500, eToastPos.BOTTOM_RIGHT)
         else
             GUI.AddToast("Spooner", "No valid entity selected", 2000, eToastPos.BOTTOM_RIGHT)
         end
@@ -3043,10 +3009,6 @@ Script.RegisterLooped(function()
             Spooner.TakeControlOfEntity(Spooner.targetedEntity)
         end)
     end
-end)
-
-Script.RegisterLooped(function()
-    Spooner.ManageEntities()
 end)
 
 EventMgr.RegisterHandler(eLuaEvent.ON_UNLOAD, function()
