@@ -8,8 +8,9 @@ function SpoonerSpawner.New(deps)
     local Keybinds = deps.Keybinds
     local NetworkUtils = deps.NetworkUtils
 
-    local self = {}
-    self.isRunningPreviewSpawn = false
+    local self = {
+        isRunningPreviewSpawn = false
+    }
 
     function self.LoadModel(modelHash, timeout)
         timeout = timeout or 5000
@@ -245,7 +246,7 @@ function SpoonerSpawner.New(deps)
             }
             table.insert(Spooner.managedEntities, managedEntry)
             CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName .. (isNetworked and " [Networked]" or " [Local]"))
-            Spooner.previewEntity = Spawner.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
+            Spooner.previewEntity = self.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
         end)
     end
 

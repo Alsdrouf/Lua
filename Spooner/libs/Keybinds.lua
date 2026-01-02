@@ -1,74 +1,74 @@
 local KeybindsLib = {}
 
 function KeybindsLib.New(PAD)
-    local Keybinds = {}
+    local self = {}
 
-    function Keybinds.GetAsString(key)
+    function self.GetAsString(key)
         return PAD.GET_CONTROL_INSTRUCTIONAL_BUTTONS_STRING(0, key, true)
     end
 
-    function Keybinds.CreateKeybind(key, func)
+    function self.CreateKeybind(key, func)
         return {
             key = key,
-            string = Keybinds.GetAsString(key),
+            string = self.GetAsString(key),
             IsPressed = function()
                 return func(key)
             end
         }
     end
 
-    function Keybinds.IsPressed(key)
+    function self.IsPressed(key)
         return PAD.IS_DISABLED_CONTROL_PRESSED(0, key)
     end
 
-    function Keybinds.IsJustPressed(key)
+    function self.IsJustPressed(key)
         return PAD.IS_DISABLED_CONTROL_JUST_PRESSED(0, key)
     end
 
-    function Keybinds.GetControlNormal(key)
+    function self.GetControlNormal(key)
         return PAD.GET_DISABLED_CONTROL_NORMAL(0, key)
     end
 
     -- Controls that should remain enabled while in Spooner mode (passthrough to game)
     -- These allow game features like pause menu and expanded map to work
-    Keybinds.PassthroughControls = {
+    self.PassthroughControls = {
         199,  -- Pause Menu (P)
         200,  -- Pause Menu alternate (Escape)
         20,   -- Big Map (Z key)
     }
 
-    function Keybinds.EnablePassthroughControls()
-        for _, control in ipairs(Keybinds.PassthroughControls) do
+    function self.EnablePassthroughControls()
+        for _, control in ipairs(self.PassthroughControls) do
             PAD.ENABLE_CONTROL_ACTION(0, control, true)
         end
     end
 
-    function Keybinds.SetupDefaultBinds()
+    function self.SetupDefaultBinds()
         return {
-            Grab = Keybinds.CreateKeybind(24, Keybinds.IsPressed),
-            AddOrRemoveFromList = Keybinds.CreateKeybind(73, Keybinds.IsJustPressed),
-            MoveFaster = Keybinds.CreateKeybind(21, Keybinds.IsPressed),
-            RotateLeft = Keybinds.CreateKeybind(44, Keybinds.IsPressed),
-            RotateRight = Keybinds.CreateKeybind(38, Keybinds.IsPressed),
-            PitchUp = Keybinds.CreateKeybind(172, Keybinds.IsPressed),    -- Arrow Up
-            PitchDown = Keybinds.CreateKeybind(173, Keybinds.IsPressed),  -- Arrow Down
-            RollLeft = Keybinds.CreateKeybind(174, Keybinds.IsPressed),   -- Arrow Left
-            RollRight = Keybinds.CreateKeybind(175, Keybinds.IsPressed),  -- Arrow Right
-            PushEntity = Keybinds.CreateKeybind(14, Keybinds.IsPressed),
-            PullEntity = Keybinds.CreateKeybind(15, Keybinds.IsPressed),
-            MoveUp = Keybinds.CreateKeybind(22, Keybinds.GetControlNormal),
-            MoveDown = Keybinds.CreateKeybind(36, Keybinds.GetControlNormal),
-            MoveForward = Keybinds.CreateKeybind(32, Keybinds.GetControlNormal),
-            MoveBackward = Keybinds.CreateKeybind(33, Keybinds.GetControlNormal),
-            MoveLeft = Keybinds.CreateKeybind(34, Keybinds.GetControlNormal),
-            MoveRight = Keybinds.CreateKeybind(35, Keybinds.GetControlNormal),
-            ConfirmSpawn = Keybinds.CreateKeybind(201, Keybinds.IsJustPressed),  -- Enter key
-            CancelSpawn = Keybinds.CreateKeybind(202, Keybinds.IsJustPressed),   -- Backspace key
-            SelectForEdit = Keybinds.CreateKeybind(25, Keybinds.IsJustPressed),  -- Right mouse button (select entity for editing)
+            Grab = self.CreateKeybind(24, self.IsPressed),
+            AddOrRemoveFromList = self.CreateKeybind(73, self.IsJustPressed),
+            MoveFaster = self.CreateKeybind(21, self.IsPressed),
+            RotateLeft = self.CreateKeybind(44, self.IsPressed),
+            RotateRight = self.CreateKeybind(38, self.IsPressed),
+            PitchUp = self.CreateKeybind(172, self.IsPressed),    -- Arrow Up
+            PitchDown = self.CreateKeybind(173, self.IsPressed),  -- Arrow Down
+            RollLeft = self.CreateKeybind(174, self.IsPressed),   -- Arrow Left
+            RollRight = self.CreateKeybind(175, self.IsPressed),  -- Arrow Right
+            PushEntity = self.CreateKeybind(14, self.IsPressed),
+            PullEntity = self.CreateKeybind(15, self.IsPressed),
+            MoveUp = self.CreateKeybind(22, self.GetControlNormal),
+            MoveDown = self.CreateKeybind(36, self.GetControlNormal),
+            MoveForward = self.CreateKeybind(32, self.GetControlNormal),
+            MoveBackward = self.CreateKeybind(33, self.GetControlNormal),
+            MoveLeft = self.CreateKeybind(34, self.GetControlNormal),
+            MoveRight = self.CreateKeybind(35, self.GetControlNormal),
+            ConfirmSpawn = self.CreateKeybind(201, self.IsJustPressed),  -- Enter key
+            CancelSpawn = self.CreateKeybind(202, self.IsJustPressed),   -- Backspace key
+            SelectForEdit = self.CreateKeybind(25, self.IsJustPressed),  -- Right mouse button (select entity for editing)
         }
     end
 
-    return Keybinds
+    return self
 end
 
 return KeybindsLib

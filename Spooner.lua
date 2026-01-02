@@ -29,14 +29,14 @@ local function LoadLib(name)
 end
 
 local LoggerLib = LoadLib("Logger")
-local XMLParser = LoadLib("XMLParser")
+local XMLParserLib = LoadLib("XMLParser")
 local EntityListsLib = LoadLib("EntityLists")
 local NetworkUtilsLib = LoadLib("NetworkUtils")
 local KeybindsLib = LoadLib("Keybinds")
 local CameraUtilsLib = LoadLib("CameraUtils")
 local MemoryUtilsLib = LoadLib("MemoryUtils")
 local RaycastLib = LoadLib("Raycast")
-local SpoonerUtils = LoadLib("SpoonerUtils")
+local SpoonerUtilsLib = LoadLib("SpoonerUtils")
 local SpoonerCoreLib = LoadLib("SpoonerCore")
 local SpoonerSpawnerLib = LoadLib("SpoonerSpawner")
 local SpoonerDrawLib = LoadLib("SpoonerDraw")
@@ -76,6 +76,8 @@ local CONSTANTS = {
 -- ============================================================================
 local CustomLogger = LoggerLib.New(pluginName)
 local MemoryUtils = MemoryUtilsLib.New()
+local XMLParser = XMLParserLib.New()
+local SpoonerUtils = SpoonerUtilsLib.New()
 
 -- ============================================================================
 -- Utilities
