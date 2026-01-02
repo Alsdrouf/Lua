@@ -9,7 +9,7 @@ function SpoonerSpawner.New(deps)
     local NetworkUtils = deps.NetworkUtils
 
     local self = {
-        isRunningPreviewSpawn = false
+        isRunningSpawn = false
     }
 
     function self.LoadModel(modelHash, timeout)
@@ -101,24 +101,32 @@ function SpoonerSpawner.New(deps)
         end
     end
 
-    function self.CreatePreviewEntity(modelHash, entityType, pos)
-        if self.isRunningPreviewSpawn then return end
-        self.isRunningPreviewSpawn = true
+    function self.SpawnEntity(modelHash, entityType, pos, networked)
+        if self.isRunningSpawn then return end
+        self.isRunningSpawn = true
         local entity = nil
-    
         if entityType == "prop" then
-            entity = GTA.CreateWorldObject(modelHash, pos.x, pos.y, pos.z, false, false)
+            entity = GTA.CreateWorldObject(modelHash, pos.x, pos.y, pos.z, false, networked)
         elseif entityType == "vehicle" then
-            entity = GTA.SpawnVehicle(modelHash, pos.x, pos.y, pos.z, 0.0, false, false)
+            entity = GTA.SpawnVehicle(modelHash, pos.x, pos.y, pos.z, 0.0, networked, false)
         elseif entityType == "ped" then
-            entity = GTA.CreatePed(modelHash, 26, pos.x, pos.y, pos.z, 0.0, false, false)
+            entity = GTA.CreatePed(modelHash, 26, pos.x, pos.y, pos.z, 0.0, networked, false)
         end
+
+        self.isRunningSpawn = false
+
+        return entity
+    end
+
+    function self.CreatePreviewEntity(modelHash, entityType, pos)
+        local entity = self.SpawnEntity(modelHash, entityType, pos, false)
     
         if entity and entity ~= 0 then
             -- Make it intangible
             ENTITY.SET_ENTITY_COLLISION(entity, false, false)
             ENTITY.SET_ENTITY_INVINCIBLE(entity, true)
             ENTITY.FREEZE_ENTITY_POSITION(entity, true)
+            ENTITY.SET_ENTITY_LOD_DIST(Spooner.previewEntity, 0xFFFF)
     
             if entityType == "ped" then
                 PED.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(entity, true)
@@ -126,8 +134,6 @@ function SpoonerSpawner.New(deps)
                 TASK.TASK_STAND_STILL(entity, -1)
             end
         end
-    
-        self.isRunningPreviewSpawn = false
     
         return entity
     end
@@ -216,37 +222,41 @@ function SpoonerSpawner.New(deps)
 
         -- Create actual entity
         Script.QueueJob(function()
-            -- Remove status
-            ENTITY.SET_ENTITY_COLLISION(Spooner.previewEntity, true, true)
-            ENTITY.SET_ENTITY_INVINCIBLE(Spooner.previewEntity, false, false)
-            if Spooner.previewEntityType ~= "prop" then
-                ENTITY.FREEZE_ENTITY_POSITION(Spooner.previewEntity, false)
-                ENTITY.SET_ENTITY_VELOCITY(Spooner.previewEntity, 0, 0 ,-1)
-            end
-            local networkId = 0
-            local isNetworked = false
-            if not Spooner.spawnUnnetworked then
-                NetworkUtils.MakeEntityNetworked(Spooner.previewEntity)
-                networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(Spooner.previewEntity)
-                isNetworked = NetworkUtils.IsEntityNetworked(Spooner.previewEntity)
-            end
             local pos = ENTITY.GET_ENTITY_COORDS(Spooner.previewEntity, true)
             local rot = ENTITY.GET_ENTITY_ROTATION(Spooner.previewEntity, 2)
+            local entity = self.SpawnEntity(Spooner.previewModelHash, Spooner.previewEntityType, pos, false)
 
-            ENTITY.SET_ENTITY_COORDS(Spooner.previewEntity, pos.x, pos.y, pos.z, false, false, false, false)
-            ENTITY.SET_ENTITY_ROTATION(Spooner.previewEntity, rot.x, rot.y, rot.z, 0, false)
+            if entity and entity ~= 0 then
+                -- Remove status
+                ENTITY.SET_ENTITY_COLLISION(entity, true, true)
+                ENTITY.SET_ENTITY_INVINCIBLE(entity, false, false)
+                if Spooner.previewEntityType ~= "prop" then
+                    ENTITY.FREEZE_ENTITY_POSITION(entity, false)
+                    ENTITY.SET_ENTITY_VELOCITY(entity, 0, 0 ,-1)
+                end
+                local networkId = 0
+                local isNetworked = false
+                if not Spooner.spawnUnnetworked then
+                    NetworkUtils.MakeEntityNetworked(entity)
+                    networkId = NETWORK.NETWORK_GET_NETWORK_ID_FROM_ENTITY(entity)
+                    isNetworked = NetworkUtils.IsEntityNetworked(entity)
+                end
 
-            ---@type ManagedEntity
-            local managedEntry = {
-                entity = Spooner.previewEntity,
-                networkId = networkId,
-                networked = isNetworked,
-                x = pos.x, y = pos.y, z = pos.z,
-                rotX = rot.x, rotY = rot.y, rotZ = rot.z
-            }
-            table.insert(Spooner.managedEntities, managedEntry)
-            CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName .. (isNetworked and " [Networked]" or " [Local]"))
-            Spooner.previewEntity = self.CreatePreviewEntity(Spooner.previewModelHash, Spooner.previewEntityType, {x=0,y=0,z=0})
+                ENTITY.SET_ENTITY_COORDS(entity, pos.x, pos.y, pos.z, false, false, false, false)
+                ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, rot.z, 0, false)
+                ENTITY.SET_ENTITY_LOD_DIST(entity, 0xFFFF)
+
+                ---@type ManagedEntity
+                local managedEntry = {
+                    entity = entity,
+                    networkId = networkId,
+                    networked = isNetworked,
+                    x = pos.x, y = pos.y, z = pos.z,
+                    rotX = rot.x, rotY = rot.y, rotZ = rot.z
+                }
+                table.insert(Spooner.managedEntities, managedEntry)
+                CustomLogger.Info("Spawned " .. Spooner.previewEntityType .. ": " .. Spooner.previewModelName .. (isNetworked and " [Networked]" or " [Local]"))
+            end
         end)
     end
 
