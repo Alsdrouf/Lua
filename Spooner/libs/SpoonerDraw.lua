@@ -96,7 +96,7 @@ function SpoonerDraw.New(deps)
         local buttonIndex = 0
 
         if Spooner.previewModelHash then
-            self.AddInstructionalButton(buttonIndex, Keybinds.ConfirmSpawn.string, "Spawn Entity")
+            self.AddInstructionalButton(buttonIndex, Keybinds.ConfirmSpawn.string, "Spawn")
             buttonIndex = buttonIndex + 1
 
             self.AddInstructionalButton(buttonIndex, Keybinds.CancelSpawn.string, "Cancel")
@@ -104,7 +104,7 @@ function SpoonerDraw.New(deps)
         end
 
         if not Spooner.previewEntity then
-            local grabLabel = Spooner.isGrabbing and "Release Entity" or "Grab Entity"
+            local grabLabel = Spooner.isGrabbing and "Release" or "Grab"
             self.AddInstructionalButton(buttonIndex, Keybinds.Grab.string, grabLabel)
             buttonIndex = buttonIndex + 1
         end
@@ -131,13 +131,13 @@ function SpoonerDraw.New(deps)
             )
             buttonIndex = buttonIndex + 1
 
-            self.AddInstructionalButton(buttonIndex, Keybinds.ResetRotation.string, "Reset Rotation")
+            self.AddInstructionalButton(buttonIndex, Keybinds.ResetRotation.string, "Reset Rot")
             buttonIndex = buttonIndex + 1
 
             self.AddInstructionalButtonMulti(
                 buttonIndex,
                 {Keybinds.PushEntity.string, Keybinds.PullEntity.string},
-                "Push / Pull Entity"
+                "Push/Pull"
             )
             buttonIndex = buttonIndex + 1
         end
@@ -154,21 +154,21 @@ function SpoonerDraw.New(deps)
                 end
             end
 
-            local listLabel = isManaged and "Remove from List" or "Add to List"
+            local listLabel = isManaged and "Remove from DB" or "Add to DB"
             self.AddInstructionalButton(buttonIndex, Keybinds.AddOrRemoveFromList.string, listLabel)
             buttonIndex = buttonIndex + 1
 
-            self.AddInstructionalButton(buttonIndex, Keybinds.SelectForEdit.string, "Quick Edit")
+            self.AddInstructionalButton(buttonIndex, Keybinds.SelectForEdit.string, "Edit")
             buttonIndex = buttonIndex + 1
         end
 
-        self.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Move Faster")
+        self.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Faster")
         buttonIndex = buttonIndex + 1
 
         self.AddInstructionalButtonMulti(
             buttonIndex,
             {Keybinds.MoveUp.string, Keybinds.MoveDown.string},
-            "Up / Down"
+            "Up/Down"
         )
         buttonIndex = buttonIndex + 1
 
