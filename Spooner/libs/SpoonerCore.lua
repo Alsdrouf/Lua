@@ -12,6 +12,7 @@ function SpoonerCore.New(deps)
     local CustomLogger = deps.CustomLogger
     local spoonerSavePath = deps.spoonerSavePath
     local SpoonerUtils = deps.SpoonerUtils
+    local RotationUtils = deps.RotationUtils
 
     local self = {}
 
@@ -308,21 +309,40 @@ function SpoonerCore.New(deps)
         end
 
         local rotationSpeed = CONSTANTS.ROTATION_SPEED * speedMultiplier
+
+        -- Camera-based rotation: rotate around camera's basis vectors
         if Keybinds.RotateRight.IsPressed() then
             self.grabbedEntityRotation.z = self.grabbedEntityRotation.z - rotationSpeed
         elseif Keybinds.RotateLeft.IsPressed() then
             self.grabbedEntityRotation.z = self.grabbedEntityRotation.z + rotationSpeed
         end
+
         if Keybinds.PitchUp.IsPressed() then
-            self.grabbedEntityRotation.x = self.grabbedEntityRotation.x - rotationSpeed
+            local newPitch, newRoll, newYaw = RotationUtils.ApplyCameraRelativeRotation(
+                right, -rotationSpeed,
+                self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z
+            )
+            self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z = newPitch, newRoll, newYaw
         elseif Keybinds.PitchDown.IsPressed() then
-            self.grabbedEntityRotation.x = self.grabbedEntityRotation.x + rotationSpeed
+            local newPitch, newRoll, newYaw = RotationUtils.ApplyCameraRelativeRotation(
+                right, rotationSpeed,
+                self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z
+            )
+            self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z = newPitch, newRoll, newYaw
         end
-        self.grabbedEntityRotation.x = math.max(CONSTANTS.PITCH_CLAMP_MIN, math.min(self.grabbedEntityRotation.x, CONSTANTS.PITCH_CLAMP_MAX))
+
         if Keybinds.RollLeft.IsPressed() then
-            self.grabbedEntityRotation.y = self.grabbedEntityRotation.y - rotationSpeed
+            local newPitch, newRoll, newYaw = RotationUtils.ApplyCameraRelativeRotation(
+                fwd, -rotationSpeed,
+                self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z
+            )
+            self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z = newPitch, newRoll, newYaw
         elseif Keybinds.RollRight.IsPressed() then
-            self.grabbedEntityRotation.y = self.grabbedEntityRotation.y + rotationSpeed
+            local newPitch, newRoll, newYaw = RotationUtils.ApplyCameraRelativeRotation(
+                fwd, rotationSpeed,
+                self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z
+            )
+            self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z = newPitch, newRoll, newYaw
         end
 
         local newPos = self.CalculateNewPosition(camPos, fwd, right, up, self.grabOffsets)

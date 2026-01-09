@@ -37,6 +37,7 @@ local CameraUtilsLib = LoadLib("CameraUtils")
 local MemoryUtilsLib = LoadLib("MemoryUtils")
 local RaycastLib = LoadLib("Raycast")
 local SpoonerUtilsLib = LoadLib("SpoonerUtils")
+local RotationUtilsLib = LoadLib("RotationUtils")
 local SpoonerCoreLib = LoadLib("SpoonerCore")
 local SpoonerSpawnerLib = LoadLib("SpoonerSpawner")
 local SpoonerDrawLib = LoadLib("SpoonerDraw")
@@ -78,6 +79,7 @@ local CustomLogger = LoggerLib.New(pluginName)
 local MemoryUtils = MemoryUtilsLib.New()
 local XMLParser = XMLParserLib.New()
 local SpoonerUtils = SpoonerUtilsLib.New()
+local RotationUtils = RotationUtilsLib.New()
 
 -- ============================================================================
 -- Utilities
@@ -231,6 +233,7 @@ local Spooner = SpoonerCoreLib.New({
     CustomLogger = CustomLogger,
     spoonerSavePath = spoonerSavePath,
     SpoonerUtils = SpoonerUtils,
+    RotationUtils = RotationUtils,
 })
 
 local Spawner = SpoonerSpawnerLib.New({
