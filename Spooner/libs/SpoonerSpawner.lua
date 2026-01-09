@@ -243,7 +243,7 @@ function SpoonerSpawner.New(deps)
                 end
 
                 ENTITY.SET_ENTITY_COORDS(entity, pos.x, pos.y, pos.z, false, false, false, false)
-                ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, rot.z, 0, false)
+                ENTITY.SET_ENTITY_ROTATION(entity, rot.x, rot.y, rot.z, 2, true)
                 ENTITY.SET_ENTITY_LOD_DIST(entity, 0xFFFF)
 
                 ---@type ManagedEntity
