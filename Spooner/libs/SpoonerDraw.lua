@@ -131,6 +131,9 @@ function SpoonerDraw.New(deps)
             )
             buttonIndex = buttonIndex + 1
 
+            self.AddInstructionalButton(buttonIndex, Keybinds.ResetRotation.string, "Reset Rotation")
+            buttonIndex = buttonIndex + 1
+
             self.AddInstructionalButtonMulti(
                 buttonIndex,
                 {Keybinds.PushEntity.string, Keybinds.PullEntity.string},

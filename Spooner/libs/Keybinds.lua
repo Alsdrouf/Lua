@@ -65,6 +65,7 @@ function KeybindsLib.New(PAD)
             ConfirmSpawn = self.CreateKeybind(201, self.IsJustPressed),  -- Enter key
             CancelSpawn = self.CreateKeybind(202, self.IsJustPressed),   -- Backspace key
             SelectForEdit = self.CreateKeybind(25, self.IsJustPressed),  -- Right mouse button (select entity for editing)
+            ResetRotation = self.CreateKeybind(45, self.IsJustPressed),  -- R key (reset pitch and roll to 0)
         }
     end
 

@@ -345,6 +345,12 @@ function SpoonerCore.New(deps)
             self.grabbedEntityRotation.x, self.grabbedEntityRotation.y, self.grabbedEntityRotation.z = newPitch, newRoll, newYaw
         end
 
+        -- Reset pitch and roll to 0 (keep yaw)
+        if Keybinds.ResetRotation.IsPressed() then
+            self.grabbedEntityRotation.x = 0
+            self.grabbedEntityRotation.y = 0
+        end
+
         local newPos = self.CalculateNewPosition(camPos, fwd, right, up, self.grabOffsets)
 
         newPos = self.ClipEntityToGround(entity, newPos)
