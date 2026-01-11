@@ -436,6 +436,29 @@ function SpoonerCore.New(deps)
             end
         end
 
+        if not self.previewModelHash and not self.isGrabbing and Keybinds.DeleteEntity.IsPressed() then
+            if self.isEntityTargeted and self.targetedEntity and ENTITY.DOES_ENTITY_EXIST(self.targetedEntity) then
+                local entityToDelete = self.targetedEntity
+                for i, managed in ipairs(self.managedEntities) do
+                    if managed.entity == entityToDelete then
+                        table.remove(self.managedEntities, i)
+                        if self.selectedEntityIndex == i then
+                            self.selectedEntityIndex = 0
+                            self.quickEditEntity = nil
+                        elseif self.selectedEntityIndex > i then
+                            self.selectedEntityIndex = self.selectedEntityIndex - 1
+                        end
+                        break
+                    end
+                end
+                self.DeleteEntity(entityToDelete)
+                self.targetedEntity = nil
+                self.isEntityTargeted = false
+                CustomLogger.Info("Deleted targeted entity")
+                GUI.AddToast("Spooner", "Entity deleted", 1500)
+            end
+        end
+
         if not self.previewModelHash and Keybinds.AddOrRemoveFromList.IsPressed() then
             local entityToAdd = nil
 

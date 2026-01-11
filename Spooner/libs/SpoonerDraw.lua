@@ -160,6 +160,11 @@ function SpoonerDraw.New(deps)
 
             self.AddInstructionalButton(buttonIndex, Keybinds.SelectForEdit.string, "Edit")
             buttonIndex = buttonIndex + 1
+
+            if not Spooner.isGrabbing then
+                self.AddInstructionalButton(buttonIndex, Keybinds.DeleteEntity.string, "Delete")
+                buttonIndex = buttonIndex + 1
+            end
         end
 
         self.AddInstructionalButton(buttonIndex, Keybinds.MoveFaster.string, "Faster")
